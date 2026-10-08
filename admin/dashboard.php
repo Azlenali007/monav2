@@ -50,6 +50,7 @@ require_once __DIR__ . '/../includes/header.php';
             <a href="/admin/providers.php" class="px-3.5 py-2 hover:bg-slate-800 rounded-xl transition-colors">Providers</a>
             <a href="/admin/payments.php" class="px-3.5 py-2 hover:bg-slate-800 rounded-xl transition-colors">Payments</a>
             <a href="/admin/tickets.php" class="px-3.5 py-2 hover:bg-slate-800 rounded-xl transition-colors">Tickets</a>
+            <a href="/admin/announcements.php" class="px-3.5 py-2 hover:bg-slate-800 rounded-xl transition-colors">Announcements</a>
             <a href="/admin/settings.php" class="px-3.5 py-2 hover:bg-slate-800 rounded-xl transition-colors">Settings</a>
             <a href="/user/dashboard.php" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 transition-colors">Back to User View</a>
         </div>

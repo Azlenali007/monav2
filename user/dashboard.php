@@ -34,6 +34,30 @@ $stmt = $db->prepare("
 $stmt->execute(['uid' => $user['id']]);
 $recentOrders = $stmt->fetchAll();
 
+// Check for active popup announcements for logged-in user
+$activeAnnouncement = null;
+try {
+    $dismissedSession = $_SESSION['dismissed_announcements'] ?? [];
+    $stmtAnnounce = $db->prepare("
+        SELECT a.* 
+        FROM announcements a
+        LEFT JOIN user_announcement_dismissals d ON a.id = d.announcement_id AND d.user_id = :uid
+        WHERE a.status = 'active'
+          AND (a.show_once = 0 OR d.user_id IS NULL)
+          AND (a.starts_at IS NULL OR a.starts_at <= NOW())
+          AND (a.expires_at IS NULL OR a.expires_at >= NOW())
+        ORDER BY a.id DESC
+        LIMIT 1
+    ");
+    $stmtAnnounce->execute(['uid' => $user['id']]);
+    $candidate = $stmtAnnounce->fetch();
+    if ($candidate && !isset($dismissedSession[(int)$candidate['id']])) {
+        $activeAnnouncement = $candidate;
+    }
+} catch (Exception $e) {
+    error_log("Announcement check: " . $e->getMessage());
+}
+
 $pageTitle = "Dashboard - " . app_name();
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -201,5 +225,172 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     <?php endif; ?>
 </div>
+
+<?php if ($activeAnnouncement): ?>
+<!-- ✨ Modern User Announcement / Notification Popup Modal -->
+<div x-data="userAnnouncementPopup(<?= htmlspecialchars(json_encode($activeAnnouncement), ENT_QUOTES, 'UTF-8') ?>)"
+     x-show="show"
+     x-cloak
+     class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+     style="display: none;"
+     @keydown.escape.window="dismiss(false)">
+    
+    <!-- Dark Backdrop with Soft Blur -->
+    <div x-show="show"
+         x-transition:enter="transition-opacity ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @click="dismiss(false)"
+         class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"></div>
+
+    <!-- Popup Card Container -->
+    <div x-show="show"
+         x-transition:enter="transition ease-out duration-300 transform"
+         x-transition:enter-start="opacity-0 translate-y-4 scale-95"
+         x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+         x-transition:leave="transition ease-in duration-200 transform"
+         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+         x-transition:leave-end="opacity-0 translate-y-4 scale-95"
+         class="relative bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200/90 z-10 overflow-hidden"
+         @click.outside="dismiss(false)">
+        
+        <!-- Subtle Decorative Ambient Light Glow -->
+        <div class="absolute -top-14 -right-14 w-36 h-36 rounded-full bg-blue-500/10 blur-2xl pointer-events-none"></div>
+
+        <!-- Top Right Close Button -->
+        <button type="button" 
+                @click="dismiss(false)"
+                aria-label="Close announcement"
+                class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 flex items-center justify-center transition-colors cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+
+        <!-- Badge & Icon Header -->
+        <div class="flex items-center gap-3.5 mb-5">
+            <!-- Dynamic Themed Icon Box -->
+            <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-md shrink-0"
+                 :class="{
+                    'bg-sky-50 text-sky-600 border border-sky-200': announcement.type === 'telegram',
+                    'bg-emerald-50 text-emerald-600 border border-emerald-200': announcement.type === 'offer',
+                    'bg-purple-50 text-purple-600 border border-purple-200': announcement.type === 'service',
+                    'bg-amber-50 text-amber-600 border border-amber-200': announcement.type === 'maintenance',
+                    'bg-blue-50 text-blue-600 border border-blue-200': announcement.type === 'update',
+                    'bg-indigo-50 text-indigo-600 border border-indigo-200': announcement.type === 'announcement' || announcement.type === 'system'
+                 }">
+                <!-- Telegram Icon -->
+                <template x-if="announcement.type === 'telegram'">
+                    <svg class="w-6 h-6 text-sky-500" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.37.74-.56 2.92-1.27 4.86-2.11 5.83-2.52 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06-.01.19-.03.38z"/>
+                    </svg>
+                </template>
+
+                <!-- Offer / Bonus Icon -->
+                <template x-if="announcement.type === 'offer'">
+                    <span class="text-xl">🎁</span>
+                </template>
+
+                <!-- Service Alert Icon -->
+                <template x-if="announcement.type === 'service'">
+                    <span class="text-xl">⚡</span>
+                </template>
+
+                <!-- Maintenance Icon -->
+                <template x-if="announcement.type === 'maintenance'">
+                    <span class="text-xl">⚠️</span>
+                </template>
+
+                <!-- Update Icon -->
+                <template x-if="announcement.type === 'update'">
+                    <span class="text-xl">🚀</span>
+                </template>
+
+                <!-- General Announcement / System Icon -->
+                <template x-if="announcement.type === 'announcement' || announcement.type === 'system'">
+                    <span class="text-xl">📢</span>
+                </template>
+            </div>
+
+            <div>
+                <!-- Category/Badge Pill -->
+                <span class="inline-block px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider"
+                      :class="{
+                        'bg-sky-50 text-sky-700 border border-sky-200': announcement.type === 'telegram',
+                        'bg-emerald-50 text-emerald-700 border border-emerald-200': announcement.type === 'offer',
+                        'bg-purple-50 text-purple-700 border border-purple-200': announcement.type === 'service',
+                        'bg-amber-50 text-amber-700 border border-amber-200': announcement.type === 'maintenance',
+                        'bg-blue-50 text-blue-700 border border-blue-200': announcement.type === 'update',
+                        'bg-indigo-50 text-indigo-700 border border-indigo-200': announcement.type === 'announcement' || announcement.type === 'system'
+                      }"
+                      x-text="announcement.badge_text || 'Announcement'">
+                </span>
+                <span class="text-[11px] text-slate-400 block font-medium mt-0.5"><?= e(app_name()) ?> Notice</span>
+            </div>
+        </div>
+
+        <!-- Title & Formatted Message -->
+        <div class="space-y-2.5">
+            <h3 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug" 
+                x-text="announcement.title"></h3>
+            <div class="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal whitespace-pre-line" 
+                 x-text="announcement.message"></div>
+        </div>
+
+        <!-- Action Button & Dismiss Controls -->
+        <div class="pt-6 mt-6 border-t border-slate-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
+            <button type="button" 
+                    @click="dismiss(true)" 
+                    class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors text-center cursor-pointer">
+                Don't show again
+            </button>
+
+            <template x-if="announcement.btn_text && announcement.btn_link">
+                <a :href="announcement.btn_link" 
+                   @click="dismiss(true)"
+                   :target="announcement.btn_link.startsWith('http') ? '_blank' : '_self'" 
+                   class="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2 text-center cursor-pointer">
+                    <span x-text="announcement.btn_text"></span>
+                    <span>&rarr;</span>
+                </a>
+            </template>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * User Announcement Popup Controller
+ * Manages display, smooth animation, and background AJAX dismissal logging
+ */
+function userAnnouncementPopup(data) {
+    return {
+        show: !!data,
+        announcement: data || {},
+
+        dismiss(dontShowAgain = false) {
+            this.show = false;
+            if (!this.announcement || !this.announcement.id) return;
+
+            // Send async dismissal request to server
+            fetch('/user/api/dismiss-announcement.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    announcement_id: this.announcement.id,
+                    dont_show_again: dontShowAgain || this.announcement.show_once == 1
+                })
+            }).catch(err => {
+                console.log('Announcement dismissed locally', err);
+            });
+        }
+    };
+}
+</script>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

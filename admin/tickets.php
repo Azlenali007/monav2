@@ -316,19 +316,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                 </div>
 
-                <!-- Admin Reply & AI Assistant Box -->
+                <!-- Admin Reply Box -->
                 <div class="pt-4 border-t border-slate-100 space-y-3">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold text-slate-700">Compose Reply</span>
-                        
-                        <!-- ✨ Future AI Reply Assistant Trigger Button -->
-                        <button type="button" 
-                                id="btnAiReply"
-                                onclick="requestAiReply(<?= (int)$selectedTicket['id'] ?>)"
-                                class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/80 shadow-xs transition-all cursor-pointer">
-                            <span>✨</span>
-                            <span>Generate AI Reply</span>
-                        </button>
                     </div>
 
                     <!-- Reply Form -->
@@ -355,7 +346,7 @@ require_once __DIR__ . '/../includes/header.php';
                             </div>
 
                             <button type="submit" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-1.5">
-                                <span>Send Manual Reply</span>
+                                <span>Send Reply</span>
                                 <span>&rarr;</span>
                             </button>
                         </div>
@@ -365,77 +356,5 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
-
-<script>
-/**
- * AI Ticket Reply Assistant Client Trigger
- * Requests suggestion from protected server-side PHP endpoint.
- * Note: Feature displays clear unconfigured notification until live provider is configured in Admin Settings.
- */
-function requestAiReply(ticketId) {
-    const btn = document.getElementById('btnAiReply');
-    if (!btn) return;
-
-    btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span><span>Analyzing Context...</span>';
-
-    fetch('/admin/api/ai-ticket-reply.php', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: JSON.stringify({ ticket_id: ticketId })
-    })
-    .then(res => res.json())
-    .then(data => {
-        btn.disabled = false;
-        btn.innerHTML = '<span>✨</span><span>Generate AI Reply</span>';
-
-        if (!data.configured) {
-            // Clear unconfigured message as required (no fake response, no hardcoded reply)
-            Swal.fire({
-                title: 'AI Reply Assistant',
-                text: data.message || 'AI Reply Assistant is not configured yet. Configure provider settings in Admin Settings.',
-                icon: 'info',
-                confirmButtonText: 'Open Settings',
-                showCancelButton: true,
-                cancelButtonText: 'Dismiss',
-                confirmButtonColor: '#2563eb'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = '/admin/settings.php';
-                }
-            });
-            return;
-        }
-
-        // When configured in future: populate draft suggestion into textarea for admin review and editing
-        if (data.suggestion) {
-            const textarea = document.getElementById('ticketReplyTextarea');
-            if (textarea) {
-                textarea.value = data.suggestion;
-                textarea.focus();
-            }
-            Swal.fire({
-                title: 'Draft Generated',
-                text: 'AI response drafted. Please review, edit, and click "Send Manual Reply" to post.',
-                icon: 'success',
-                timer: 3000
-            });
-        }
-    })
-    .catch(err => {
-        btn.disabled = false;
-        btn.innerHTML = '<span>✨</span><span>Generate AI Reply</span>';
-        Swal.fire({
-            title: 'Notice',
-            text: 'AI Reply Assistant is not configured yet. Please configure provider settings in Admin Settings.',
-            icon: 'info',
-            confirmButtonText: 'OK'
-        });
-    });
-}
-</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

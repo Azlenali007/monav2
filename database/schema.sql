@@ -5,6 +5,8 @@
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+DROP TABLE IF EXISTS `user_announcement_dismissals`;
+DROP TABLE IF EXISTS `announcements`;
 DROP TABLE IF EXISTS `ticket_messages`;
 DROP TABLE IF EXISTS `tickets`;
 DROP TABLE IF EXISTS `transactions`;
@@ -158,6 +160,35 @@ CREATE TABLE `ticket_messages` (
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 10. ANNOUNCEMENTS / POPUP NOTIFICATIONS TABLE
+CREATE TABLE `announcements` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `title` VARCHAR(255) NOT NULL,
+  `type` ENUM('announcement', 'service', 'maintenance', 'offer', 'telegram', 'update', 'system') NOT NULL DEFAULT 'announcement',
+  `badge_text` VARCHAR(64) DEFAULT 'Important Notice',
+  `message` TEXT NOT NULL,
+  `btn_text` VARCHAR(100) NULL,
+  `btn_link` VARCHAR(255) NULL,
+  `target_audience` ENUM('all', 'active_users') NOT NULL DEFAULT 'all',
+  `show_once` TINYINT(1) NOT NULL DEFAULT 1,
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `starts_at` DATETIME NULL,
+  `expires_at` DATETIME NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_announcements_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11. USER ANNOUNCEMENT DISMISSALS TABLE
+CREATE TABLE `user_announcement_dismissals` (
+  `user_id` INT UNSIGNED NOT NULL,
+  `announcement_id` INT UNSIGNED NOT NULL,
+  `dismissed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`, `announcement_id`),
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`announcement_id`) REFERENCES `announcements`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- =====================================================================
 -- SEED INITIAL CONFIGURATION & DEFAULT DATA
 -- =====================================================================
@@ -222,3 +253,9 @@ INSERT INTO `tickets` (`id`, `user_id`, `order_id`, `subject`, `status`, `priori
 (1023, 1024, NULL, 'Payment issue with QR code', 'in_progress', 'medium', '2025-05-10 18:15:00'),
 (1022, 1024, 10253, 'Service delivery speed query', 'closed', 'low', '2025-05-08 15:40:00'),
 (1021, 1024, 10251, 'Wrong quantity query', 'closed', 'low', '2025-05-06 13:10:00');
+
+-- Default Announcements (Shows modern popup on User Dashboard)
+INSERT INTO `announcements` (`id`, `title`, `type`, `badge_text`, `message`, `btn_text`, `btn_link`, `target_audience`, `show_once`, `status`) VALUES
+(1, 'Welcome to SMM Panel! Join Our Official Telegram Channel', 'telegram', 'Official Telegram', 'Get instant order updates, exclusive flash discount codes, and priority support in our official Telegram community. Join thousands of active creators today!', 'Join Telegram Channel', 'https://t.me/smmpanelofficial', 'all', 1, 'active'),
+(2, '⚡ Special Offer: 10% Extra Balance on All UPI & Crypto Deposits', 'offer', 'Special Offer', 'Top up your account balance today and automatically receive an extra 10% bonus credit on all instant UPI and USDT deposits over ₹500.', 'Add Funds Now', '/user/add-funds.php', 'all', 1, 'inactive');
+

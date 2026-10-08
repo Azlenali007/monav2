@@ -28,6 +28,7 @@ $adminNavLinks = [
     ['name' => 'Payments', 'url' => '/admin/payments.php', 'icon' => '💳'],
     ['name' => 'Transactions', 'url' => '/admin/transactions.php', 'icon' => '📑'],
     ['name' => 'Tickets', 'url' => '/admin/tickets.php', 'icon' => '💬'],
+    ['name' => 'Announcements', 'url' => '/admin/announcements.php', 'icon' => '📢'],
     ['name' => 'Settings', 'url' => '/admin/settings.php', 'icon' => '⚙️'],
 ];
 ?>
