@@ -248,11 +248,11 @@ require_once __DIR__ . '/../includes/header.php';
                                             <span>Refresh Balance</span>
                                         </button>
 
-                                        <!-- Future Service Import Link (Reusing Provider Credentials) -->
+                                        <!-- Service Import Link (Reusing Provider Credentials) -->
                                         <a href="/admin/import-services.php?provider_id=<?= (int)$p['id'] ?>" 
                                            class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors flex items-center gap-1"
                                            title="Import services from this provider">
-                                            <span>⚡</span> Import (Coming Soon)
+                                            <span>⚡</span> Import Services
                                         </a>
 
                                         <!-- Delete Provider Button -->
