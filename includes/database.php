@@ -210,13 +210,17 @@ class Database {
             (7, 'Facebook Page Likes & Followers', 'facebook', 7),
             (8, 'Twitter (X) Followers & Retweets', 'twitter', 8);
 
-            INSERT OR IGNORE INTO services (id, category_id, name, rate_per_1000, min_quantity, max_quantity, speed) VALUES
-            (101, 1, 'Instagram Followers [Real & Active Followers - High Quality]', 35.0, 1000, 1000000, 'Starts in 1-2 Hours'),
-            (102, 2, 'Instagram Likes [High Quality - Instant Start]', 20.0, 100, 500000, 'Instant Start'),
-            (103, 3, 'Instagram Views & Reels [High Retention]', 15.0, 1000, 10000000, 'Instant Start'),
-            (104, 2, 'Instagram Custom Comments [Positive Real Text]', 50.0, 10, 10000, 'Fast Delivery'),
-            (201, 4, 'YouTube Views [Real Views - High Retention]', 12.0, 1000, 5000000, 'Fast Delivery'),
-            (301, 5, 'Telegram Members [Real & Active Members - Instant Start]', 45.0, 500, 200000, 'Instant Start');
+            INSERT OR IGNORE INTO services (id, category_id, name, rate_per_1000, min_quantity, max_quantity, speed, description, status) VALUES
+            (101, 1, 'Instagram Followers [Real & Active Followers - High Quality]', 35.0, 1000, 1000000, 'Starts in 1-2 Hours', 'High quality, non-drop real active followers. Instant start with 30-day auto-refill.', 'active'),
+            (102, 2, 'Instagram Likes [High Quality - Instant Start]', 20.0, 100, 500000, 'Instant Start', 'Ultra-fast delivery of premium likes from active accounts worldwide.', 'active'),
+            (103, 3, 'Instagram Views & Reels [High Retention]', 15.0, 1000, 10000000, 'Instant Start', 'Viral video engagement booster for Instagram Reels and video posts.', 'active'),
+            (104, 2, 'Instagram Custom Comments [Positive Real Text]', 50.0, 10, 10000, 'Fast Delivery', 'Custom written comments in English or your regional language.', 'active'),
+            (201, 4, 'YouTube Views [Real Views - High Retention]', 12.0, 1000, 5000000, 'Fast Delivery', 'Monetization-safe high watch-time views from search and recommended videos.', 'active'),
+            (202, 4, 'YouTube Subscribers [Non-Drop & Real Channels]', 180.0, 50, 50000, 'Starts in 2-4 Hours', 'Permanent non-drop YouTube channel subscribers with lifetime warranty.', 'active'),
+            (301, 5, 'Telegram Members [Real & Active Members - Instant Start]', 45.0, 500, 200000, 'Instant Start', 'Telegram channel and group members. Real accounts with 0% drop guarantee.', 'active'),
+            (401, 6, 'TikTok Followers [Real & Active Accounts]', 65.0, 100, 200000, 'Instant Start', 'High quality TikTok followers worldwide. Account profile must be public.', 'active'),
+            (501, 7, 'Facebook Page Likes & Followers [High Quality - Non Drop]', 80.0, 100, 500000, 'Instant Start', 'Worldwide page likes and followers with 30 days refill guarantee.', 'active'),
+            (601, 8, 'Twitter (X) Followers [Real Looking Accounts]', 95.0, 100, 100000, 'Starts in 1 Hour', 'Active Twitter profiles with bio & avatars. Safe, stable and high quality.', 'active');
 
             INSERT OR IGNORE INTO orders (id, user_id, service_id, link, quantity, charge, start_count, remains, status) VALUES
             (10254, 1024, 101, 'https://instagram.com/aarisali', 1000, 35.0, 4200, 200, 'processing'),

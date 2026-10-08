@@ -196,7 +196,11 @@ INSERT INTO `services` (`id`, `category_id`, `name`, `rate_per_1000`, `min_quant
 (103, 3, 'Instagram Views & Reels [High Retention]', 15.0000, 1000, 10000000, 'Instant Start', 'Viral video engagement booster for Instagram Reels and videos.', 'active'),
 (104, 2, 'Instagram Custom Comments [Positive Real Text]', 50.0000, 10, 10000, 'Fast Delivery', 'Custom written comments in English or your language.', 'active'),
 (201, 4, 'YouTube Views [Real Views - High Retention]', 12.0000, 1000, 5000000, 'Fast Delivery', 'Monetization-safe high watch time views from search and suggested videos.', 'active'),
-(301, 5, 'Telegram Members [Real & Active Members - Instant Start]', 45.0000, 500, 200000, 'Instant Start', 'Telegram channel and group members. Real accounts with 0% drop guarantee.', 'active');
+(202, 4, 'YouTube Subscribers [Non-Drop & Real Channels]', 180.0000, 50, 50000, 'Starts in 2-4 Hours', 'Permanent non-drop YouTube channel subscribers with lifetime warranty.', 'active'),
+(301, 5, 'Telegram Members [Real & Active Members - Instant Start]', 45.0000, 500, 200000, 'Instant Start', 'Telegram channel and group members. Real accounts with 0% drop guarantee.', 'active'),
+(401, 6, 'TikTok Followers [Real & Active Accounts]', 65.0000, 100, 200000, 'Instant Start', 'High quality TikTok followers worldwide. Account profile must be set to public.', 'active'),
+(501, 7, 'Facebook Page Likes & Followers [High Quality - Non Drop]', 80.0000, 100, 500000, 'Instant Start', 'Worldwide page likes and followers with 30 days refill guarantee.', 'active'),
+(601, 8, 'Twitter (X) Followers [Real Looking Accounts]', 95.0000, 100, 100000, 'Starts in 1 Hour', 'Active Twitter profiles with bio & avatars. Safe, stable and high quality.', 'active');
 
 -- Default Demo Orders for Aaris Ali (#1024)
 INSERT INTO `orders` (`id`, `user_id`, `service_id`, `link`, `quantity`, `charge`, `start_count`, `remains`, `status`, `created_at`) VALUES
