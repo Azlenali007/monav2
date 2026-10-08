@@ -23,58 +23,71 @@ $currentScript = $_SERVER['SCRIPT_NAME'] ?? '';
     </div>
 
     <?php elseif ($isUserPage): ?>
-        <!-- User Fixed Bottom Navigation Bar (Services, Transactions, Support, Profile) -->
-        <!-- Fixed to viewport, stays visible during scrolling, handles safe-area-inset-bottom -->
-        <nav class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-2xl" 
-             style="padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0.5rem));"
+        <!-- User Floating Glass Bottom Dock (Dashboard, Services, New Order, Orders, Profile) -->
+        <!-- Fixed to viewport with floating island layout, blur backdrop and safe-area padding -->
+        <nav class="fixed bottom-3 sm:bottom-4 left-3 right-3 max-w-lg mx-auto z-40 bg-white/90 backdrop-blur-2xl border border-white/90 shadow-[0_20px_50px_-10px_rgba(15,23,42,0.2)] rounded-3xl p-1.5 transition-all" 
+             style="padding-bottom: max(0.4rem, env(safe-area-inset-bottom, 0.4rem));"
              aria-label="User Quick Navigation">
-            <div class="max-w-md mx-auto px-4 py-2 flex items-center justify-around">
-                <!-- 1. Services -->
+            <div class="flex items-center justify-around relative">
+                <!-- 1. Dashboard -->
+                <?php $isDashActive = str_contains($currentScript, 'dashboard.php'); ?>
+                <a href="/user/dashboard.php" 
+                   class="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all <?= $isDashActive ? 'text-blue-600 font-extrabold' : 'text-slate-500 hover:text-slate-900 font-medium' ?>">
+                    <div class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors <?= $isDashActive ? 'bg-blue-50 text-blue-600' : 'text-slate-500' ?>">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                        </svg>
+                    </div>
+                    <span class="text-[10px] tracking-tight">Home</span>
+                </a>
+
+                <!-- 2. Services -->
                 <?php $isServicesActive = str_contains($currentScript, 'services.php'); ?>
                 <a href="/user/services.php" 
-                   class="flex flex-col items-center gap-1 py-1 px-3 rounded-2xl transition-all <?= $isServicesActive ? 'text-blue-600 font-extrabold' : 'text-slate-500 hover:text-slate-900 font-semibold' ?>">
-                    <div class="w-8 h-8 rounded-xl flex items-center justify-center <?= $isServicesActive ? 'bg-blue-50 text-blue-600' : 'text-slate-500' ?>">
+                   class="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all <?= $isServicesActive ? 'text-blue-600 font-extrabold' : 'text-slate-500 hover:text-slate-900 font-medium' ?>">
+                    <div class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors <?= $isServicesActive ? 'bg-blue-50 text-blue-600' : 'text-slate-500' ?>">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
                         </svg>
                     </div>
-                    <span class="text-[11px] tracking-tight">Services</span>
+                    <span class="text-[10px] tracking-tight">Services</span>
                 </a>
 
-                <!-- 2. Transactions -->
-                <?php $isTxnActive = str_contains($currentScript, 'transactions.php'); ?>
-                <a href="/user/transactions.php" 
-                   class="flex flex-col items-center gap-1 py-1 px-3 rounded-2xl transition-all <?= $isTxnActive ? 'text-blue-600 font-extrabold' : 'text-slate-500 hover:text-slate-900 font-semibold' ?>">
-                    <div class="w-8 h-8 rounded-xl flex items-center justify-center <?= $isTxnActive ? 'bg-blue-50 text-blue-600' : 'text-slate-500' ?>">
+                <!-- 3. Prominent Centerpiece: New Order -->
+                <?php $isNewOrderActive = str_contains($currentScript, 'new-order.php'); ?>
+                <a href="/user/new-order.php" 
+                   class="flex flex-col items-center -mt-5 group"
+                   title="Place New Order">
+                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-blue-700 text-white flex items-center justify-center shadow-lg shadow-blue-500/35 border-2 border-white group-hover:scale-105 group-active:scale-95 transition-all">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+                        </svg>
+                    </div>
+                    <span class="text-[10px] font-bold text-blue-600 mt-0.5 tracking-tight">Order</span>
+                </a>
+
+                <!-- 4. Orders / Transactions -->
+                <?php $isOrdersActive = str_contains($currentScript, 'orders.php') || str_contains($currentScript, 'transactions.php'); ?>
+                <a href="/user/orders.php" 
+                   class="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all <?= $isOrdersActive ? 'text-blue-600 font-extrabold' : 'text-slate-500 hover:text-slate-900 font-medium' ?>">
+                    <div class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors <?= $isOrdersActive ? 'bg-blue-50 text-blue-600' : 'text-slate-500' ?>">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
                         </svg>
                     </div>
-                    <span class="text-[11px] tracking-tight">Transactions</span>
+                    <span class="text-[10px] tracking-tight">Orders</span>
                 </a>
 
-                <!-- 3. Support -->
-                <?php $isSupportActive = str_contains($currentScript, 'tickets.php'); ?>
-                <a href="/user/tickets.php" 
-                   class="flex flex-col items-center gap-1 py-1 px-3 rounded-2xl transition-all <?= $isSupportActive ? 'text-blue-600 font-extrabold' : 'text-slate-500 hover:text-slate-900 font-semibold' ?>">
-                    <div class="w-8 h-8 rounded-xl flex items-center justify-center <?= $isSupportActive ? 'bg-blue-50 text-blue-600' : 'text-slate-500' ?>">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"/>
-                        </svg>
-                    </div>
-                    <span class="text-[11px] tracking-tight">Support</span>
-                </a>
-
-                <!-- 4. Profile -->
-                <?php $isProfileActive = str_contains($currentScript, 'profile.php'); ?>
+                <!-- 5. Profile / Support -->
+                <?php $isProfileActive = str_contains($currentScript, 'profile.php') || str_contains($currentScript, 'tickets.php'); ?>
                 <a href="/user/profile.php" 
-                   class="flex flex-col items-center gap-1 py-1 px-3 rounded-2xl transition-all <?= $isProfileActive ? 'text-blue-600 font-extrabold' : 'text-slate-500 hover:text-slate-900 font-semibold' ?>">
-                    <div class="w-8 h-8 rounded-xl flex items-center justify-center <?= $isProfileActive ? 'bg-blue-50 text-blue-600' : 'text-slate-500' ?>">
+                   class="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all <?= $isProfileActive ? 'text-blue-600 font-extrabold' : 'text-slate-500 hover:text-slate-900 font-medium' ?>">
+                    <div class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors <?= $isProfileActive ? 'bg-blue-50 text-blue-600' : 'text-slate-500' ?>">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                         </svg>
                     </div>
-                    <span class="text-[11px] tracking-tight">Profile</span>
+                    <span class="text-[10px] tracking-tight">Profile</span>
                 </a>
             </div>
         </nav>

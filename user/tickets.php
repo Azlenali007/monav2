@@ -125,71 +125,77 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="max-w-4xl mx-auto my-4 space-y-6">
+    <!-- Top Bar Navigation -->
     <div class="flex items-center justify-between">
-        <a href="/user/dashboard.php" class="text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors">
-            &larr; Back to Dashboard
+        <a href="/user/dashboard.php" class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            <span>Back to Dashboard</span>
         </a>
     </div>
 
-    <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xl">
-        <div class="flex items-center justify-between pb-6 border-b border-slate-100">
+    <!-- Main Tickets Card -->
+    <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xl space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
             <div>
-                <h2 class="text-2xl font-extrabold text-slate-900">Support</h2>
-                <p class="text-xs text-slate-500 mt-0.5">24/7 dedicated support for all your queries</p>
+                <h2 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Support Desk</h2>
+                <p class="text-xs text-slate-400 mt-0.5">24/7 dedicated support team for order inquiries and technical help</p>
             </div>
-            <button type="button" onclick="document.getElementById('newTicketSection').classList.toggle('hidden')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/25 transition-all">
-                + Create Ticket
+            <button type="button" onclick="document.getElementById('newTicketSection').classList.toggle('hidden')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                <span>+</span> Open New Ticket
             </button>
         </div>
 
         <?php if ($error): ?>
-            <div class="my-4 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
-                <?= e($error) ?>
+            <div class="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                <span>⚠️</span>
+                <span><?= e($error) ?></span>
             </div>
         <?php endif; ?>
 
         <!-- Create Ticket Collapsible Form -->
-        <div id="newTicketSection" class="<?= $showNewModal || !empty($_GET['order_id']) ? '' : 'hidden' ?> my-6 p-6 rounded-2xl bg-blue-50/50 border border-blue-200">
-            <h3 class="text-base font-extrabold text-slate-900 mb-4">Open a New Support Ticket</h3>
+        <div id="newTicketSection" class="<?= $showNewModal || !empty($_GET['order_id']) ? '' : 'hidden' ?> p-6 rounded-3xl bg-gradient-to-br from-blue-50/60 via-white to-indigo-50/40 border border-blue-200/80 shadow-xs">
+            <h3 class="text-base font-black text-slate-900 mb-4 flex items-center gap-2">
+                <span>💬</span> Open a New Support Ticket
+            </h3>
             <form action="/user/tickets.php" method="POST" class="space-y-4">
                 <?= CSRF::field() ?>
                 <input type="hidden" name="action" value="create_ticket">
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Subject</label>
-                        <input type="text" name="subject" required placeholder="e.g. Order not started yet" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600">
+                        <label class="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">Subject</label>
+                        <input type="text" name="subject" required placeholder="e.g. Order speed or refill inquiry" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-semibold focus:ring-3 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Related Order ID (Optional)</label>
-                        <input type="number" name="order_id" value="<?= e($_GET['order_id'] ?? '') ?>" placeholder="e.g. 10254" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600">
+                        <label class="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">Related Order ID (Optional)</label>
+                        <input type="number" name="order_id" value="<?= e($_GET['order_id'] ?? '') ?>" placeholder="e.g. 10254" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-semibold focus:ring-3 focus:ring-blue-500/20 focus:border-blue-600 transition-all font-mono-nums">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Priority</label>
-                    <select name="priority" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600">
-                        <option value="low">Low Priority</option>
-                        <option value="medium" selected>Medium Priority</option>
-                        <option value="high">High / Urgent Priority</option>
+                    <label class="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">Priority Level</label>
+                    <select name="priority" class="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-semibold focus:ring-3 focus:ring-blue-500/20 focus:border-blue-600 transition-all cursor-pointer">
+                        <option value="low">Low Priority (General question)</option>
+                        <option value="medium" selected>Medium Priority (Standard support)</option>
+                        <option value="high">High Priority (Urgent order issue)</option>
                     </select>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Message Description</label>
-                    <textarea name="message" rows="4" required placeholder="Please describe your issue in detail..." class="w-full p-4 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"></textarea>
+                    <label class="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">Detailed Message</label>
+                    <textarea name="message" rows="4" required placeholder="Describe your issue or order details clearly so our agents can resolve it quickly..." class="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-medium focus:ring-3 focus:ring-blue-500/20 focus:border-blue-600 transition-all"></textarea>
                 </div>
 
-                <div class="flex items-center justify-end gap-3">
-                    <button type="button" onclick="document.getElementById('newTicketSection').classList.add('hidden')" class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl">Cancel</button>
-                    <button type="submit" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md">Submit Ticket</button>
+                <div class="flex items-center justify-end gap-3 pt-2">
+                    <button type="button" onclick="document.getElementById('newTicketSection').classList.add('hidden')" class="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200/70 rounded-xl transition-colors cursor-pointer">Cancel</button>
+                    <button type="submit" class="px-7 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-blue-500/25 transition-all cursor-pointer">Submit Ticket &rarr;</button>
                 </div>
             </form>
         </div>
 
         <!-- Filter Tabs -->
-        <div class="flex items-center gap-2 overflow-x-auto py-4">
-            <a href="/user/tickets.php?status=all" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $statusFilter === 'all' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">All</a>
+        <div class="flex items-center gap-2 overflow-x-auto py-2">
+            <a href="/user/tickets.php?status=all" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $statusFilter === 'all' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">All Tickets</a>
             <a href="/user/tickets.php?status=open" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $statusFilter === 'open' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">Open</a>
             <a href="/user/tickets.php?status=in_progress" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $statusFilter === 'in_progress' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">In Progress</a>
             <a href="/user/tickets.php?status=closed" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $statusFilter === 'closed' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">Closed</a>
@@ -198,7 +204,7 @@ require_once __DIR__ . '/../includes/header.php';
         <!-- Tickets List -->
         <?php if (empty($tickets)): ?>
             <div class="py-16 text-center">
-                <div class="w-16 h-16 rounded-full bg-slate-100 mx-auto flex items-center justify-center text-2xl mb-3">💬</div>
+                <div class="w-16 h-16 rounded-2xl bg-slate-100 mx-auto flex items-center justify-center text-2xl mb-3 shadow-xs">💬</div>
                 <h3 class="text-sm font-bold text-slate-900">No support tickets found</h3>
                 <p class="text-xs text-slate-500 mt-1">Need help with an order or payment? Create a ticket anytime.</p>
             </div>
@@ -208,14 +214,17 @@ require_once __DIR__ . '/../includes/header.php';
                     $tId = (int)$t['id'];
                     $msgs = $ticketMessages[$tId] ?? [];
                 ?>
-                    <div class="p-5 rounded-2xl border border-slate-200/80 hover:border-slate-300 bg-white transition-all">
-                        <div class="flex items-center justify-between cursor-pointer" onclick="document.getElementById('thread-<?= $tId ?>').classList.toggle('hidden')">
+                    <div class="p-5 rounded-3xl border border-slate-200/80 hover:border-slate-300 bg-white shadow-xs transition-all">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer" onclick="document.getElementById('thread-<?= $tId ?>').classList.toggle('hidden')">
                             <div>
                                 <div class="flex items-center gap-2">
-                                    <span class="text-xs font-bold font-mono text-slate-400">#T<?= $tId ?></span>
-                                    <h4 class="text-sm font-extrabold text-slate-900"><?= e($t['subject']) ?></h4>
+                                    <span class="text-xs font-black font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">#T<?= $tId ?></span>
+                                    <h4 class="text-sm font-black text-slate-900"><?= e($t['subject']) ?></h4>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider <?= $t['priority'] === 'high' ? 'bg-rose-50 text-rose-600 border border-rose-200' : ($t['priority'] === 'medium' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-100 text-slate-600') ?>">
+                                        <?= e($t['priority']) ?>
+                                    </span>
                                 </div>
-                                <div class="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
+                                <div class="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-1">
                                     <span><?= date('d M Y, h:i A', strtotime($t['created_at'])) ?></span>
                                     <?php if ($t['order_id']): ?>
                                         <span>• Order #<?= (int)$t['order_id'] ?></span>
@@ -223,25 +232,25 @@ require_once __DIR__ . '/../includes/header.php';
                                     <span>• <?= count($msgs) ?> message(s)</span>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-3 self-end sm:self-center">
                                 <span class="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider <?= $t['status'] === 'open' ? 'bg-amber-50 text-amber-600 border border-amber-200' : ($t['status'] === 'in_progress' ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-slate-100 text-slate-600') ?>">
                                     <?= e(str_replace('_', ' ', $t['status'])) ?>
                                 </span>
-                                <span class="text-xs text-blue-600 font-bold hover:underline">View Conversation &darr;</span>
+                                <span class="text-xs text-blue-600 font-bold hover:underline">Conversation &darr;</span>
                             </div>
                         </div>
 
                         <!-- Ticket Conversation Thread -->
                         <div id="thread-<?= $tId ?>" class="hidden mt-4 pt-4 border-t border-slate-100 space-y-3">
                             <?php foreach ($msgs as $msg): ?>
-                                <div class="p-3.5 rounded-xl text-xs <?= $msg['is_admin'] ? 'bg-blue-50 border border-blue-200 text-blue-950 ml-4' : 'bg-slate-50 border border-slate-200 text-slate-800 mr-4' ?>">
-                                    <div class="flex items-center justify-between font-bold mb-1">
-                                        <span class="<?= $msg['is_admin'] ? 'text-blue-700' : 'text-slate-700' ?>">
-                                            <?= $msg['is_admin'] ? '🛡️ Support Team' : '👤 You' ?>
+                                <div class="p-4 rounded-2xl text-xs <?= $msg['is_admin'] ? 'bg-blue-50/80 border border-blue-200/80 text-blue-950 ml-4 sm:ml-8' : 'bg-slate-50 border border-slate-200/80 text-slate-800 mr-4 sm:mr-8' ?>">
+                                    <div class="flex items-center justify-between font-bold mb-1.5">
+                                        <span class="<?= $msg['is_admin'] ? 'text-blue-700' : 'text-slate-800' ?>">
+                                            <?= $msg['is_admin'] ? '🛡️ Support Specialist' : '👤 You' ?>
                                         </span>
                                         <span class="text-[10px] text-slate-400 font-normal"><?= date('d M, h:i A', strtotime($msg['created_at'])) ?></span>
                                     </div>
-                                    <p class="leading-relaxed whitespace-pre-wrap"><?= e($msg['message']) ?></p>
+                                    <p class="leading-relaxed whitespace-pre-wrap text-slate-700"><?= e($msg['message']) ?></p>
                                 </div>
                             <?php endforeach; ?>
 
@@ -251,8 +260,8 @@ require_once __DIR__ . '/../includes/header.php';
                                     <?= CSRF::field() ?>
                                     <input type="hidden" name="action" value="reply_ticket">
                                     <input type="hidden" name="ticket_id" value="<?= $tId ?>">
-                                    <input type="text" name="message" required placeholder="Type your response to support..." class="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600">
-                                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm">Send</button>
+                                    <input type="text" name="message" required placeholder="Type your response to support..." class="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-3 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
+                                    <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-500/20 transition-all cursor-pointer">Send</button>
                                 </form>
                             <?php endif; ?>
                         </div>

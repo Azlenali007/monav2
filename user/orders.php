@@ -95,29 +95,41 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         <?php else: ?>
             <div class="divide-y divide-slate-100 mt-2">
-                <?php foreach ($orders as $order): ?>
-                    <a href="/user/order-details.php?id=<?= (int)$order['id'] ?>" class="py-4 flex items-center justify-between hover:bg-slate-50/70 p-3 rounded-2xl transition-all group">
+                <?php foreach ($orders as $order): 
+                    $plat = strtolower($order['platform'] ?? 'other');
+                    $platStyle = match ($plat) {
+                        'instagram' => ['bg' => 'bg-gradient-to-tr from-pink-500 via-rose-500 to-purple-600', 'name' => 'Instagram'],
+                        'youtube' => ['bg' => 'bg-gradient-to-tr from-red-500 to-rose-600', 'name' => 'YouTube'],
+                        'telegram' => ['bg' => 'bg-gradient-to-tr from-sky-400 to-blue-600', 'name' => 'Telegram'],
+                        'facebook' => ['bg' => 'bg-gradient-to-tr from-blue-600 to-indigo-700', 'name' => 'Facebook'],
+                        'tiktok' => ['bg' => 'bg-gradient-to-tr from-slate-900 to-black', 'name' => 'TikTok'],
+                        default => ['bg' => 'bg-gradient-to-tr from-indigo-600 to-purple-600', 'name' => ucfirst($plat)]
+                    };
+                ?>
+                    <a href="/user/order-details.php?id=<?= (int)$order['id'] ?>" class="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 p-3 rounded-2xl transition-all group">
                         <div class="flex items-center gap-3.5">
                             <!-- Platform Icon Badge -->
-                            <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-white text-xs font-extrabold shadow-sm shrink-0">
+                            <div class="w-12 h-12 rounded-2xl <?= $platStyle['bg'] ?> flex items-center justify-center text-white text-xs font-black shadow-md shadow-slate-900/10 shrink-0">
                                 <?= strtoupper(substr($order['platform'], 0, 2)) ?>
                             </div>
                             <div>
-                                <h4 class="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                                <h4 class="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
                                     <?= e($order['service_name']) ?>
                                 </h4>
-                                <div class="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                                    <span class="font-bold text-slate-700 font-mono-nums"><?= number_format($order['quantity']) ?> qty</span>
+                                <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-0.5">
+                                    <span class="font-extrabold text-slate-800 font-mono-nums"><?= number_format($order['quantity']) ?> qty</span>
                                     <span>•</span>
-                                    <span class="font-extrabold text-slate-900"><?= format_currency($order['charge']) ?></span>
+                                    <span class="font-extrabold text-blue-600 tabular-nums"><?= format_currency($order['charge']) ?></span>
                                     <span>•</span>
                                     <span class="font-mono text-[11px] text-slate-400">#<?= (int)$order['id'] ?></span>
+                                    <span>•</span>
+                                    <span class="text-[11px] text-slate-400 truncate max-w-[180px]"><?= e($order['link']) ?></span>
                                 </div>
                             </div>
                         </div>
-                        <div class="flex items-center gap-4 text-right">
+                        <div class="flex items-center justify-between sm:justify-end gap-4 text-right shrink-0 pl-15 sm:pl-0">
                             <div>
-                                <span class="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider <?= $order['status'] === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : ($order['status'] === 'processing' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-100 text-slate-600') ?>">
+                                <span class="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider <?= $order['status'] === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : ($order['status'] === 'processing' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-100 text-slate-600 border border-slate-200') ?>">
                                     <?= e($order['status']) ?>
                                 </span>
                                 <span class="block text-[11px] text-slate-400 mt-1 font-medium">

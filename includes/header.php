@@ -73,13 +73,14 @@ $adminNavLinks = [
     <style>
         .font-script { font-family: 'Caveat', cursive; }
         .font-mono-nums { font-variant-numeric: tabular-nums; }
-        .card-glow-blue { box-shadow: 0 20px 35px -10px rgba(37, 99, 235, 0.25); }
-        .card-glow-green { box-shadow: 0 20px 35px -10px rgba(16, 185, 129, 0.25); }
-        .card-glow-amber { box-shadow: 0 20px 35px -10px rgba(245, 158, 11, 0.25); }
+        .card-glow-blue { box-shadow: 0 20px 40px -12px rgba(37, 99, 235, 0.22); }
+        .card-glow-green { box-shadow: 0 20px 40px -12px rgba(16, 185, 129, 0.22); }
+        .card-glow-amber { box-shadow: 0 20px 40px -12px rgba(245, 158, 11, 0.22); }
+        .card-glass { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
         .safe-bottom-padding { padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 1.25rem)); }
     </style>
 </head>
-<body class="min-h-full font-sans text-slate-800 antialiased bg-[#f8fafc]">
+<body class="min-h-full font-sans text-slate-800 antialiased bg-[#f6f9fc] selection:bg-blue-600 selection:text-white">
     <?php if ($isAdminPage): ?>
         <!-- Admin App Layout Container with Alpine.js Sidebar state -->
         <div x-data="{ sidebarOpen: false }" class="min-h-screen flex flex-col lg:flex-row bg-[#0f172a]/[0.02]">
@@ -231,24 +232,64 @@ $adminNavLinks = [
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                 <?= render_flash() ?>
     <?php else: ?>
-        <!-- User Panel Minimal Top Bar -->
-        <header class="bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-30">
-            <div class="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-                <a href="/user/dashboard.php" class="flex items-center gap-2">
-                    <div class="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-sm">
-                        ⚡
-                    </div>
-                    <span class="text-sm font-extrabold text-slate-900"><?= e(app_name()) ?></span>
-                </a>
+        <!-- User Panel Modern Glass Header -->
+        <header class="bg-white/85 backdrop-blur-xl border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <!-- Brand Emblem -->
+                <div class="flex items-center gap-6">
+                    <a href="/user/dashboard.php" class="flex items-center gap-2.5 group">
+                        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-md shadow-blue-500/25 group-hover:scale-105 transition-transform">
+                            ⚡
+                        </div>
+                        <div>
+                            <span class="text-base font-extrabold text-slate-900 tracking-tight leading-none block"><?= e(app_name()) ?></span>
+                            <span class="text-[10px] font-bold text-blue-600 tracking-wider uppercase leading-none mt-0.5 block">Client Portal</span>
+                        </div>
+                    </a>
+
+                    <!-- Desktop Navigation Links -->
+                    <nav class="hidden md:flex items-center gap-1 pl-4 border-l border-slate-200">
+                        <a href="/user/dashboard.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'dashboard.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                            Dashboard
+                        </a>
+                        <a href="/user/new-order.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all <?= str_contains($currentScript, 'new-order.php') ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25' : 'text-blue-600 hover:bg-blue-50' ?>">
+                            + New Order
+                        </a>
+                        <a href="/user/services.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'services.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                            Services
+                        </a>
+                        <a href="/user/orders.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'orders.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                            Orders
+                        </a>
+                        <a href="/user/transactions.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'transactions.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                            Transactions
+                        </a>
+                        <a href="/user/tickets.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'tickets.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                            Support
+                        </a>
+                    </nav>
+                </div>
+
+                <!-- Right Action Bar -->
                 <div class="flex items-center gap-3">
-                    <a href="/user/add-funds.php" class="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200/60 px-3 py-1 rounded-xl text-xs font-bold text-blue-600 transition-colors">
-                        <span>Balance:</span>
-                        <span class="font-extrabold text-slate-900 font-mono-nums"><?= format_currency($currentUser['balance'] ?? 0) ?></span>
+                    <!-- Balance Card -->
+                    <a href="/user/add-funds.php" class="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-indigo-50/80 hover:from-blue-100 hover:to-indigo-100/90 border border-blue-200/80 pl-3 pr-2 py-1.5 rounded-2xl transition-all shadow-xs group">
+                        <span class="text-[11px] font-semibold text-slate-500 hidden sm:inline">Balance:</span>
+                        <span class="text-xs sm:text-sm font-extrabold text-blue-700 font-mono-nums"><?= format_currency($currentUser['balance'] ?? 0) ?></span>
+                        <span class="w-6 h-6 rounded-xl bg-blue-600 text-white font-extrabold flex items-center justify-center text-xs shadow-xs group-hover:scale-105 transition-transform">+</span>
                     </a>
-                    <a href="/user/profile.php" class="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold flex items-center justify-center text-xs transition-colors" title="My Profile">
-                        <?= strtoupper(substr($currentUser['username'] ?? 'U', 0, 1)) ?>
+
+                    <!-- Profile Chip -->
+                    <a href="/user/profile.php" class="flex items-center gap-2 p-1 pl-2 sm:pr-3 rounded-2xl hover:bg-slate-100 border border-slate-200/60 transition-colors" title="My Profile">
+                        <div class="w-7 h-7 rounded-xl bg-gradient-to-tr from-slate-800 to-slate-900 text-white font-black flex items-center justify-center text-xs shadow-xs">
+                            <?= strtoupper(substr($currentUser['username'] ?? 'U', 0, 1)) ?>
+                        </div>
+                        <span class="text-xs font-bold text-slate-700 hidden sm:inline"><?= e($currentUser['username'] ?? 'Account') ?></span>
                     </a>
-                    <a href="/logout.php" class="text-xs text-rose-500 font-bold ml-1 hover:text-rose-600">Logout</a>
+
+                    <a href="/logout.php" class="text-xs text-rose-500 hover:text-rose-600 font-bold px-2 py-1 transition-colors" title="Logout">
+                        Logout
+                    </a>
                 </div>
             </div>
         </header>

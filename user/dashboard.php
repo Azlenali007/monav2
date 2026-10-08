@@ -21,7 +21,17 @@ $stmt = $db->prepare("SELECT COUNT(*) AS total_orders FROM orders WHERE user_id 
 $stmt->execute(['uid' => $user['id']]);
 $totalOrders = (int)($stmt->fetch()['total_orders'] ?? 0);
 
-// Fetch recent 3 orders
+$stmtComp = $db->prepare("SELECT COUNT(*) AS completed_orders FROM orders WHERE user_id = :uid AND status = 'completed'");
+$stmtComp->execute(['uid' => $user['id']]);
+$completedOrders = (int)($stmtComp->fetch()['completed_orders'] ?? 0);
+
+$stmtTix = $db->prepare("SELECT COUNT(*) AS active_tickets FROM tickets WHERE user_id = :uid AND status IN ('open', 'in_progress')");
+$stmtTix->execute(['uid' => $user['id']]);
+$activeTickets = (int)($stmtTix->fetch()['active_tickets'] ?? 0);
+
+$totalSpent = (float)($user['spent'] ?? 0);
+
+// Fetch recent 4 orders
 $stmt = $db->prepare("
     SELECT o.*, s.name AS service_name, c.platform
     FROM orders o
@@ -29,7 +39,7 @@ $stmt = $db->prepare("
     JOIN categories c ON s.category_id = c.id
     WHERE o.user_id = :uid
     ORDER BY o.created_at DESC
-    LIMIT 3
+    LIMIT 4
 ");
 $stmt->execute(['uid' => $user['id']]);
 $recentOrders = $stmt->fetchAll();
@@ -63,26 +73,87 @@ require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="max-w-6xl mx-auto space-y-8">
-    <!-- User Welcome & Balance Bar -->
-    <div class="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div class="flex items-center gap-4">
-            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-md shadow-blue-500/20">
-                <?= strtoupper(substr($user['username'], 0, 1)) ?>
+    <!-- User Welcome & Balance Hero Banner -->
+    <div class="relative bg-gradient-to-br from-white via-blue-50/40 to-indigo-50/30 rounded-3xl p-6 sm:p-8 border border-white/80 shadow-[0_20px_50px_-15px_rgba(15,23,42,0.07)] overflow-hidden">
+        <!-- Ambient decorative glow -->
+        <div class="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-blue-500/10 blur-3xl pointer-events-none"></div>
+
+        <div class="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-6 border-b border-slate-200/60">
+            <!-- User Info -->
+            <div class="flex items-center gap-4">
+                <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-blue-700 flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-blue-500/25 border-2 border-white">
+                    <?= strtoupper(substr($user['username'], 0, 1)) ?>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-semibold text-slate-400">Welcome back,</span>
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200/60">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Active
+                        </span>
+                    </div>
+                    <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight"><?= e($user['username']) ?></h1>
+                    <div class="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
+                        <span>User ID: <strong class="text-slate-800">#<?= (int)$user['id'] ?></strong></span>
+                        <span>•</span>
+                        <span>Tier: <strong class="text-blue-600">Verified Client</strong></span>
+                    </div>
+                </div>
             </div>
-            <div>
-                <span class="text-xs font-semibold text-slate-400">Welcome back,</span>
-                <h1 class="text-2xl font-extrabold text-slate-900"><?= e($user['username']) ?></h1>
-                <span class="text-xs font-medium text-slate-500">User ID: <span class="font-bold text-slate-700">#<?= (int)$user['id'] ?></span></span>
+
+            <!-- Balance & Fast Actions -->
+            <div class="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full md:w-auto">
+                <div class="bg-white/90 backdrop-blur-md px-5 py-3 rounded-2xl border border-slate-200/80 shadow-xs flex-1 sm:flex-none">
+                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Wallet Balance</span>
+                    <span class="text-2xl font-black text-slate-900 tabular-nums font-mono-nums"><?= format_currency($user['balance']) ?></span>
+                </div>
+                <div class="flex items-center gap-2 flex-1 sm:flex-none">
+                    <a href="/user/add-funds.php" class="px-5 py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-2 flex-1 whitespace-nowrap">
+                        <span>💳</span> Add Funds
+                    </a>
+                    <a href="/user/new-order.php" class="px-5 py-3.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center justify-center gap-1.5 flex-1 whitespace-nowrap">
+                        <span>⚡</span> New Order
+                    </a>
+                </div>
             </div>
         </div>
-        <div class="flex items-center gap-4 bg-slate-50 p-3 rounded-2xl border border-slate-200/60 w-full md:w-auto justify-between md:justify-start">
-            <div class="text-left">
-                <span class="text-xs font-semibold text-slate-500 block">Your Balance</span>
-                <span class="text-2xl font-extrabold text-slate-900 tabular-nums"><?= format_currency($user['balance']) ?></span>
+
+        <!-- 4 Key Metric Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-6">
+            <div class="bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/70 shadow-xs">
+                <div class="flex items-center justify-between text-slate-400 mb-1">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Orders</span>
+                    <span class="text-sm">📦</span>
+                </div>
+                <span class="text-xl sm:text-2xl font-black text-slate-900 tabular-nums"><?= number_format($totalOrders) ?></span>
+                <span class="text-[11px] text-slate-400 block mt-0.5">Campaigns launched</span>
             </div>
-            <a href="/user/add-funds.php" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 whitespace-nowrap">
-                <span>+</span> Add Funds
-            </a>
+
+            <div class="bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/70 shadow-xs">
+                <div class="flex items-center justify-between text-slate-400 mb-1">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Completed</span>
+                    <span class="text-sm">✅</span>
+                </div>
+                <span class="text-xl sm:text-2xl font-black text-emerald-600 tabular-nums"><?= number_format($completedOrders) ?></span>
+                <span class="text-[11px] text-slate-400 block mt-0.5">Fully delivered</span>
+            </div>
+
+            <div class="bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/70 shadow-xs">
+                <div class="flex items-center justify-between text-slate-400 mb-1">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Spent</span>
+                    <span class="text-sm">💰</span>
+                </div>
+                <span class="text-xl sm:text-2xl font-black text-blue-700 tabular-nums"><?= format_currency($totalSpent) ?></span>
+                <span class="text-[11px] text-slate-400 block mt-0.5">Lifetime spending</span>
+            </div>
+
+            <div class="bg-white/80 backdrop-blur-sm p-4 rounded-2xl border border-slate-200/70 shadow-xs">
+                <div class="flex items-center justify-between text-slate-400 mb-1">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Active Tickets</span>
+                    <span class="text-sm">💬</span>
+                </div>
+                <span class="text-xl sm:text-2xl font-black text-slate-900 tabular-nums"><?= number_format($activeTickets) ?></span>
+                <span class="text-[11px] text-slate-400 block mt-0.5">24/7 Support queue</span>
+            </div>
         </div>
     </div>
 
@@ -158,72 +229,147 @@ require_once __DIR__ . '/../includes/header.php';
 
     <!-- Quick Access Hub -->
     <div>
-        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Quick Access</h3>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <a href="/user/services.php" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center text-lg font-bold">⚡</div>
+        <div class="flex items-center justify-between mb-4 px-1">
+            <h3 class="text-xs font-extrabold text-slate-400 uppercase tracking-widest">Portal Shortcuts</h3>
+            <span class="text-xs text-slate-400 font-medium">Quick jump to essential tools</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+            <!-- 1. New Order -->
+            <a href="/user/new-order.php" class="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md hover:border-blue-200 hover:-translate-y-0.5 transition-all group flex flex-col justify-between">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-blue-500/25 group-hover:scale-110 transition-transform mb-3">
+                    ⚡
+                </div>
                 <div>
-                    <h4 class="text-sm font-bold text-slate-900">Services</h4>
-                    <p class="text-[11px] text-slate-500">Browse all services</p>
+                    <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">New Order</h4>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Instant delivery</p>
                 </div>
             </a>
-            <a href="/user/transactions.php" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-bold">💳</div>
+
+            <!-- 2. Services Hub -->
+            <a href="/user/services.php" class="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md hover:border-pink-200 hover:-translate-y-0.5 transition-all group flex flex-col justify-between">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-pink-500/25 group-hover:scale-110 transition-transform mb-3">
+                    💎
+                </div>
                 <div>
-                    <h4 class="text-sm font-bold text-slate-900">Transactions</h4>
-                    <p class="text-[11px] text-slate-500">Wallet & history</p>
+                    <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-pink-600 transition-colors">Services</h4>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Wholesale rates</p>
                 </div>
             </a>
-            <a href="/user/tickets.php" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg font-bold">💬</div>
+
+            <!-- 3. Track Orders -->
+            <a href="/user/orders.php" class="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md hover:border-amber-200 hover:-translate-y-0.5 transition-all group flex flex-col justify-between">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-amber-500/25 group-hover:scale-110 transition-transform mb-3">
+                    📦
+                </div>
                 <div>
-                    <h4 class="text-sm font-bold text-slate-900">Support</h4>
-                    <p class="text-[11px] text-slate-500">Get 24/7 help</p>
+                    <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-amber-600 transition-colors">My Orders</h4>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Live tracking</p>
                 </div>
             </a>
-            <a href="/user/profile.php" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center text-lg font-bold">👤</div>
+
+            <!-- 4. Add Funds -->
+            <a href="/user/add-funds.php" class="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md hover:border-emerald-200 hover:-translate-y-0.5 transition-all group flex flex-col justify-between">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-emerald-500/25 group-hover:scale-110 transition-transform mb-3">
+                    💳
+                </div>
                 <div>
-                    <h4 class="text-sm font-bold text-slate-900">Profile</h4>
-                    <p class="text-[11px] text-slate-500">Account settings</p>
+                    <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-emerald-600 transition-colors">Add Funds</h4>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Auto-credit</p>
+                </div>
+            </a>
+
+            <!-- 5. Transactions -->
+            <a href="/user/transactions.php" class="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md hover:border-indigo-200 hover:-translate-y-0.5 transition-all group flex flex-col justify-between">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-500 to-blue-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-indigo-500/25 group-hover:scale-110 transition-transform mb-3">
+                    📑
+                </div>
+                <div>
+                    <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors">Ledger</h4>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Payment log</p>
+                </div>
+            </a>
+
+            <!-- 6. 24/7 Support -->
+            <a href="/user/tickets.php" class="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md hover:border-purple-200 hover:-translate-y-0.5 transition-all group flex flex-col justify-between">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-500 to-violet-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-purple-500/25 group-hover:scale-110 transition-transform mb-3">
+                    💬
+                </div>
+                <div>
+                    <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-purple-600 transition-colors">Support</h4>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Dedicated desk</p>
                 </div>
             </a>
         </div>
     </div>
 
     <!-- Recent Orders Section -->
-    <?php if (!empty($recentOrders)): ?>
-        <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-bold text-slate-900">Recent Orders</h3>
-                <a href="/user/orders.php" class="text-xs font-bold text-blue-600 hover:underline">View All &rarr;</a>
+    <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm">
+        <div class="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
+            <div>
+                <h3 class="text-lg font-extrabold text-slate-900 tracking-tight">Recent Orders</h3>
+                <p class="text-xs text-slate-400 mt-0.5">Real-time status updates of your latest campaigns</p>
             </div>
+            <a href="/user/orders.php" class="px-4 py-2 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors flex items-center gap-1">
+                <span>View All Orders</span> &rarr;
+            </a>
+        </div>
+
+        <?php if (empty($recentOrders)): ?>
+            <div class="py-12 text-center">
+                <div class="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl mx-auto mb-3 shadow-xs">
+                    📦
+                </div>
+                <h4 class="text-sm font-bold text-slate-900">No recent orders yet</h4>
+                <p class="text-xs text-slate-400 max-w-sm mx-auto mt-1">Ready to boost your social media? Place your first order with instant start.</p>
+                <a href="/user/new-order.php" class="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/25 transition-all">
+                    <span>⚡</span> Launch First Campaign
+                </a>
+            </div>
+        <?php else: ?>
             <div class="divide-y divide-slate-100">
-                <?php foreach ($recentOrders as $ro): ?>
-                    <div class="py-3.5 flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-700 uppercase">
+                <?php foreach ($recentOrders as $ro): 
+                    $plat = strtolower($ro['platform']);
+                    $platBadge = match ($plat) {
+                        'instagram' => ['bg' => 'bg-pink-50 text-pink-600 border-pink-100', 'name' => 'Instagram'],
+                        'youtube' => ['bg' => 'bg-red-50 text-red-600 border-red-100', 'name' => 'YouTube'],
+                        'telegram' => ['bg' => 'bg-sky-50 text-sky-600 border-sky-100', 'name' => 'Telegram'],
+                        'facebook' => ['bg' => 'bg-blue-50 text-blue-600 border-blue-100', 'name' => 'Facebook'],
+                        'tiktok' => ['bg' => 'bg-slate-100 text-slate-900 border-slate-200', 'name' => 'TikTok'],
+                        default => ['bg' => 'bg-indigo-50 text-indigo-600 border-indigo-100', 'name' => ucfirst($plat)]
+                    };
+                ?>
+                    <div class="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 p-3 rounded-2xl transition-colors">
+                        <div class="flex items-center gap-3.5">
+                            <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-black uppercase tracking-wider border shrink-0 <?= $platBadge['bg'] ?>">
                                 <?= substr($ro['platform'], 0, 2) ?>
                             </div>
                             <div>
-                                <h4 class="text-xs font-bold text-slate-900"><?= e($ro['service_name']) ?></h4>
-                                <span class="text-[11px] text-slate-400">#<?= (int)$ro['id'] ?> • <?= date('d M Y, h:i A', strtotime($ro['created_at'])) ?></span>
+                                <h4 class="text-xs sm:text-sm font-bold text-slate-900 line-clamp-1"><?= e($ro['service_name']) ?></h4>
+                                <div class="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                                    <span class="font-mono text-slate-500 font-medium">#<?= (int)$ro['id'] ?></span>
+                                    <span>•</span>
+                                    <span><?= date('d M Y, h:i A', strtotime($ro['created_at'])) ?></span>
+                                </div>
                             </div>
                         </div>
-                        <div class="text-right flex items-center gap-3">
-                            <div>
-                                <span class="text-xs font-bold text-slate-900 block tabular-nums"><?= format_currency($ro['charge']) ?></span>
-                                <span class="text-[10px] text-slate-400 font-medium"><?= number_format($ro['quantity']) ?> qty</span>
+
+                        <div class="flex items-center justify-between sm:justify-end gap-4 shrink-0 pl-13 sm:pl-0">
+                            <div class="text-left sm:text-right">
+                                <span class="text-xs sm:text-sm font-extrabold text-slate-900 block tabular-nums"><?= format_currency($ro['charge']) ?></span>
+                                <span class="text-[11px] text-slate-400 font-medium"><?= number_format($ro['quantity']) ?> qty</span>
                             </div>
-                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider <?= $ro['status'] === 'completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600' ?>">
+                            <span class="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider <?= $ro['status'] === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/80' : 'bg-amber-50 text-amber-600 border border-amber-200/80' ?>">
                                 <?= e($ro['status']) ?>
                             </span>
+                            <a href="/user/order-details.php?id=<?= (int)$ro['id'] ?>" class="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors" title="View Order">
+                                &rarr;
+                            </a>
                         </div>
                     </div>
                 <?php endforeach; ?>
             </div>
-        </div>
-    <?php endif; ?>
+        <?php endif; ?>
+    </div>
 </div>
 
 <?php if ($activeAnnouncement): ?>
