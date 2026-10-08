@@ -233,23 +233,26 @@ $adminNavLinks = [
                 <?= render_flash() ?>
     <?php else: ?>
         <!-- User Panel Modern Glass Header -->
-        <header class="bg-white/85 backdrop-blur-xl border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
+        <header class="bg-white/85 backdrop-blur-xl border-b border-slate-200/70 sticky top-0 z-30 shadow-xs">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
                 <!-- Brand Emblem -->
                 <div class="flex items-center gap-6">
                     <a href="/user/dashboard.php" class="flex items-center gap-2.5 group">
                         <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-md shadow-blue-500/25 group-hover:scale-105 transition-transform">
-                            ⚡
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                            </svg>
                         </div>
                         <div>
-                            <span class="text-base font-extrabold text-slate-900 tracking-tight leading-none block"><?= e(app_name()) ?></span>
-                            <span class="text-[10px] font-bold text-blue-600 tracking-wider uppercase leading-none mt-0.5 block">Client Portal</span>
+                            <span class="text-base font-black text-slate-900 tracking-tight leading-none block"><?= e(app_name()) ?></span>
+                            <span class="text-[10px] font-medium text-slate-400 tracking-tight leading-none mt-1 block"><?= e(app_tagline()) ?></span>
                         </div>
                     </a>
 
-                    <!-- Desktop Navigation Links -->
+                    <?php if (!str_contains($currentScript, 'dashboard.php')): ?>
+                    <!-- Desktop Navigation Links for sub-pages -->
                     <nav class="hidden md:flex items-center gap-1 pl-4 border-l border-slate-200">
-                        <a href="/user/dashboard.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'dashboard.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                        <a href="/user/dashboard.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors text-slate-600 hover:text-slate-900 hover:bg-slate-50">
                             Dashboard
                         </a>
                         <a href="/user/new-order.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all <?= str_contains($currentScript, 'new-order.php') ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25' : 'text-blue-600 hover:bg-blue-50' ?>">
@@ -268,28 +271,50 @@ $adminNavLinks = [
                             Support
                         </a>
                     </nav>
+                    <?php endif; ?>
                 </div>
 
-                <!-- Right Action Bar -->
-                <div class="flex items-center gap-3">
-                    <!-- Balance Card -->
-                    <a href="/user/add-funds.php" class="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-indigo-50/80 hover:from-blue-100 hover:to-indigo-100/90 border border-blue-200/80 pl-3 pr-2 py-1.5 rounded-2xl transition-all shadow-xs group">
-                        <span class="text-[11px] font-semibold text-slate-500 hidden sm:inline">Balance:</span>
-                        <span class="text-xs sm:text-sm font-extrabold text-blue-700 font-mono-nums"><?= format_currency($currentUser['balance'] ?? 0) ?></span>
-                        <span class="w-6 h-6 rounded-xl bg-blue-600 text-white font-extrabold flex items-center justify-center text-xs shadow-xs group-hover:scale-105 transition-transform">+</span>
-                    </a>
+                <!-- Right Action Bar (Reference Header Style) -->
+                <div class="flex items-center gap-2.5 sm:gap-3">
+                    <?php if (str_contains($currentScript, 'dashboard.php')): ?>
+                        <!-- 1. Small Notification Bell Icon Button -->
+                        <a href="/user/dashboard.php" class="w-9 h-9 rounded-full bg-blue-50/80 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors relative" title="Notifications">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                            </svg>
+                            <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-600 border border-white"></span>
+                        </a>
 
-                    <!-- Profile Chip -->
-                    <a href="/user/profile.php" class="flex items-center gap-2 p-1 pl-2 sm:pr-3 rounded-2xl hover:bg-slate-100 border border-slate-200/60 transition-colors" title="My Profile">
-                        <div class="w-7 h-7 rounded-xl bg-gradient-to-tr from-slate-800 to-slate-900 text-white font-black flex items-center justify-center text-xs shadow-xs">
+                        <!-- 2. Small Support/Ticket Icon Button -->
+                        <a href="/user/tickets.php" class="w-9 h-9 rounded-full bg-blue-50/80 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors" title="Support Help Desk">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        </a>
+
+                        <!-- 3. Profile Avatar Circular Button -->
+                        <a href="/user/profile.php" class="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-xs border-2 border-white shadow-xs hover:ring-2 hover:ring-blue-200 transition-all" title="User Profile">
                             <?= strtoupper(substr($currentUser['username'] ?? 'U', 0, 1)) ?>
-                        </div>
-                        <span class="text-xs font-bold text-slate-700 hidden sm:inline"><?= e($currentUser['username'] ?? 'Account') ?></span>
-                    </a>
+                        </a>
+                    <?php else: ?>
+                        <!-- Standard Subpage Header Controls -->
+                        <a href="/user/add-funds.php" class="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-indigo-50/80 hover:from-blue-100 hover:to-indigo-100/90 border border-blue-200/80 pl-3 pr-2 py-1.5 rounded-2xl transition-all shadow-xs group">
+                            <span class="text-[11px] font-semibold text-slate-500 hidden sm:inline">Balance:</span>
+                            <span class="text-xs sm:text-sm font-extrabold text-blue-700 font-mono-nums"><?= format_currency($currentUser['balance'] ?? 0) ?></span>
+                            <span class="w-6 h-6 rounded-xl bg-blue-600 text-white font-extrabold flex items-center justify-center text-xs shadow-xs group-hover:scale-105 transition-transform">+</span>
+                        </a>
 
-                    <a href="/logout.php" class="text-xs text-rose-500 hover:text-rose-600 font-bold px-2 py-1 transition-colors" title="Logout">
-                        Logout
-                    </a>
+                        <a href="/user/profile.php" class="flex items-center gap-2 p-1 pl-2 sm:pr-3 rounded-2xl hover:bg-slate-100 border border-slate-200/60 transition-colors" title="My Profile">
+                            <div class="w-7 h-7 rounded-xl bg-gradient-to-tr from-slate-800 to-slate-900 text-white font-black flex items-center justify-center text-xs shadow-xs">
+                                <?= strtoupper(substr($currentUser['username'] ?? 'U', 0, 1)) ?>
+                            </div>
+                            <span class="text-xs font-bold text-slate-700 hidden sm:inline"><?= e($currentUser['username'] ?? 'Account') ?></span>
+                        </a>
+
+                        <a href="/logout.php" class="text-xs text-rose-500 hover:text-rose-600 font-bold px-2 py-1 transition-colors" title="Logout">
+                            Logout
+                        </a>
+                    <?php endif; ?>
                 </div>
             </div>
         </header>

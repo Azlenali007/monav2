@@ -19,56 +19,56 @@ function cardCarousel() {
                 id: 'add-funds',
                 title: 'Add Funds',
                 subtitle: 'Top up your wallet',
-                badge: 'Instant UPI / QR',
+                badge: 'Instant Wallet',
                 icon: '💳',
-                bgClass: 'from-emerald-500 to-teal-600',
-                glow: 'rgba(16, 185, 129, 0.4)',
+                bgClass: 'from-emerald-500 via-green-500 to-teal-600',
+                glow: 'rgba(16, 185, 129, 0.45)',
                 link: '/user/add-funds.php',
-                action: 'Open'
+                action: 'Open →'
             },
             {
                 id: 'new-order',
                 title: 'New Order',
-                subtitle: 'Place a new order for social media',
-                badge: 'Fast Delivery',
+                subtitle: 'Place a new order for your social media',
+                badge: 'Instant Delivery',
                 icon: '⚡',
                 bgClass: 'from-blue-600 via-indigo-600 to-purple-600',
-                glow: 'rgba(79, 70, 229, 0.5)',
+                glow: 'rgba(79, 70, 229, 0.55)',
                 link: '/user/new-order.php',
-                action: 'Open'
+                action: 'Open →'
             },
             {
                 id: 'my-orders',
                 title: 'My Orders',
-                subtitle: 'Track your orders & live status',
-                badge: 'Real-time Tracking',
+                subtitle: 'Track your orders',
+                badge: 'Live Status',
                 icon: '📦',
-                bgClass: 'from-amber-500 to-orange-600',
-                glow: 'rgba(245, 158, 11, 0.4)',
+                bgClass: 'from-amber-500 via-orange-500 to-amber-600',
+                glow: 'rgba(245, 158, 11, 0.45)',
                 link: '/user/orders.php',
-                action: 'Open'
+                action: 'Open →'
             },
             {
                 id: 'services',
-                title: 'Services Hub',
-                subtitle: 'Browse 250+ active services',
+                title: 'Services',
+                subtitle: 'Browse all services',
                 badge: 'Wholesale Rates',
                 icon: '💎',
-                bgClass: 'from-fuchsia-600 to-pink-600',
-                glow: 'rgba(217, 70, 239, 0.4)',
+                bgClass: 'from-pink-500 via-rose-500 to-rose-600',
+                glow: 'rgba(236, 72, 153, 0.45)',
                 link: '/user/services.php',
-                action: 'Open'
+                action: 'Open →'
             },
             {
                 id: 'support',
-                title: '24/7 Support',
-                subtitle: 'Dedicated customer assistance',
-                badge: 'Online Help',
+                title: 'Support',
+                subtitle: 'Get help',
+                badge: '24/7 Desk',
                 icon: '💬',
-                bgClass: 'from-violet-600 to-purple-700',
-                glow: 'rgba(139, 92, 246, 0.4)',
+                bgClass: 'from-purple-500 via-violet-600 to-indigo-600',
+                glow: 'rgba(139, 92, 246, 0.45)',
                 link: '/user/tickets.php',
-                action: 'Open'
+                action: 'Open →'
             }
         ],
 
@@ -126,48 +126,68 @@ function cardCarousel() {
                     zIndex: '30',
                     filter: 'brightness(1)',
                     pointerEvents: 'auto',
-                    boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)'
+                    boxShadow: '0 25px 60px -15px rgba(59, 130, 246, 0.45)'
                 };
             }
             if (diff === -1) {
                 // Left Tilted Card: rotated into 3D space, partially visible
-                const tx = mobile ? '-52%' : '-64%';
-                const rot = mobile ? '28deg' : '32deg';
+                const tx = mobile ? '-52%' : '-58%';
+                const rot = mobile ? '24deg' : '26deg';
                 const sc = mobile ? '0.84' : '0.86';
-                const tz = mobile ? '-50px' : '-80px';
+                const tz = mobile ? '-40px' : '-60px';
                 return {
                     transform: `translate3d(${tx}, 0, ${tz}) scale(${sc}) rotateY(${rot})`,
-                    opacity: '0.88',
+                    opacity: '0.92',
                     zIndex: '20',
-                    filter: 'brightness(0.9)',
+                    filter: 'brightness(0.95)',
                     cursor: 'pointer',
-                    pointerEvents: 'auto'
+                    pointerEvents: 'auto',
+                    boxShadow: '0 20px 45px -12px rgba(16, 185, 129, 0.35)'
                 };
             }
             if (diff === 1) {
                 // Right Tilted Card: angled in reverse perspective
-                const tx = mobile ? '52%' : '64%';
-                const rot = mobile ? '-28deg' : '-32deg';
+                const tx = mobile ? '52%' : '58%';
+                const rot = mobile ? '-24deg' : '-26deg';
                 const sc = mobile ? '0.84' : '0.86';
-                const tz = mobile ? '-50px' : '-80px';
+                const tz = mobile ? '-40px' : '-60px';
                 return {
                     transform: `translate3d(${tx}, 0, ${tz}) scale(${sc}) rotateY(${rot})`,
-                    opacity: '0.88',
+                    opacity: '0.92',
                     zIndex: '20',
-                    filter: 'brightness(0.9)',
+                    filter: 'brightness(0.95)',
                     cursor: 'pointer',
-                    pointerEvents: 'auto'
+                    pointerEvents: 'auto',
+                    boxShadow: '0 20px 45px -12px rgba(245, 158, 11, 0.35)'
                 };
             }
-            // Distant cards: smoothly hidden behind depth plane
-            const dir = diff < 0 ? -1 : 1;
-            const tx = dir < 0 ? '-120%' : '120%';
-            const rot = dir < 0 ? '45deg' : '-45deg';
+            if (diff === -2) {
+                // Outer Left Card peek (stacked layer)
+                const tx = mobile ? '-86%' : '-92%';
+                return {
+                    transform: `translate3d(${tx}, 0, -110px) scale(0.72) rotateY(32deg)`,
+                    opacity: '0.45',
+                    zIndex: '10',
+                    filter: 'brightness(0.85) blur(0.5px)',
+                    pointerEvents: 'none'
+                };
+            }
+            if (diff === 2) {
+                // Outer Right Card peek (stacked layer)
+                const tx = mobile ? '86%' : '92%';
+                return {
+                    transform: `translate3d(${tx}, 0, -110px) scale(0.72) rotateY(-32deg)`,
+                    opacity: '0.45',
+                    zIndex: '10',
+                    filter: 'brightness(0.85) blur(0.5px)',
+                    pointerEvents: 'none'
+                };
+            }
+            // Distant cards
             return {
-                transform: `translate3d(${tx}, 0, -200px) scale(0.65) rotateY(${rot})`,
+                transform: 'translate3d(0, 0, -200px) scale(0.5)',
                 opacity: '0',
-                zIndex: '10',
-                filter: 'brightness(0.7)',
+                zIndex: '5',
                 pointerEvents: 'none'
             };
         },
