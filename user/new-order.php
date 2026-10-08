@@ -207,6 +207,8 @@ require_once __DIR__ . '/../includes/header.php';
                             <?= $isSelected ? 'selected' : '' ?>
                             data-platform="<?= e($svcPlat) ?>"
                             data-rate="<?= (float)$svc['rate_per_1000'] ?>"
+                            data-user-rate="<?= (float)get_user_rate($svc['rate_per_1000']) ?>"
+                            data-formatted-rate="<?= e(format_currency($svc['rate_per_1000'])) ?>"
                             data-min="<?= (int)$svc['min_quantity'] ?>"
                             data-max="<?= (int)$svc['max_quantity'] ?>"
                             data-speed="<?= e($svc['speed']) ?>"
@@ -231,7 +233,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <h4 id="lblServiceName" class="text-base font-extrabold text-slate-900 mt-0.5">High Quality Followers</h4>
                     </div>
                     <div class="text-left sm:text-right">
-                        <span id="badgeRate" class="text-2xl font-black text-blue-700 tabular-nums">₹35.00 / 1K</span>
+                        <span id="badgeRate" class="text-2xl font-black text-blue-700 tabular-nums"><?= format_currency($services[0]['rate_per_1000'] ?? 35) ?> / 1K</span>
                         <p id="badgeSpeed" class="text-xs font-semibold text-emerald-600 mt-0.5">⚡ Instant Start (0-15 mins)</p>
                     </div>
                 </div>
@@ -300,7 +302,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div>
                     <span class="text-xs text-slate-400 uppercase tracking-wider font-bold block">Estimated Charge:</span>
                     <div class="flex items-baseline gap-2">
-                        <span id="totalPrice" class="text-3xl sm:text-4xl font-black text-slate-900 tabular-nums font-mono-nums">₹35.00</span>
+                        <span id="totalPrice" class="text-3xl sm:text-4xl font-black text-slate-900 tabular-nums font-mono-nums"><?= format_currency((($services[0]['min_quantity'] ?? 1000) / 1000) * ($services[0]['rate_per_1000'] ?? 35)) ?></span>
                         <span class="text-xs text-slate-400 font-semibold" id="priceSubtext">incl. all fees</span>
                     </div>
                     <p id="insufficientWarning" class="text-xs font-bold text-rose-600 mt-1 hidden">
@@ -324,7 +326,8 @@ function updateServiceDetails() {
     const opt = sel.options[sel.selectedIndex];
     if (!opt) return;
 
-    const rate = parseFloat(opt.getAttribute('data-rate') || 0);
+    const userRate = parseFloat(opt.getAttribute('data-user-rate') || 0);
+    const formattedRate = opt.getAttribute('data-formatted-rate') || ('<?= e(app_currency()) ?>' + userRate.toFixed(2));
     const min = parseInt(opt.getAttribute('data-min') || 100);
     const max = parseInt(opt.getAttribute('data-max') || 10000);
     const speed = opt.getAttribute('data-speed') || 'Instant Start';
@@ -332,7 +335,7 @@ function updateServiceDetails() {
     const desc = opt.getAttribute('data-desc') || 'Standard social media service with automated fulfillment.';
     const name = opt.innerText.split('—')[0].trim();
 
-    document.getElementById('badgeRate').innerText = '<?= e(app_currency()) ?>' + rate.toFixed(2) + ' / 1K';
+    document.getElementById('badgeRate').innerText = formattedRate + ' / 1K';
     document.getElementById('badgeSpeed').innerText = '⚡ ' + speed;
     document.getElementById('lblServiceName').innerText = name;
     document.getElementById('lblCategory').innerText = cat;
@@ -373,17 +376,18 @@ function calculatePrice() {
     const qty = parseInt(document.getElementById('quantityInput').value) || 0;
     if (!opt) return;
 
-    const rate = parseFloat(opt.getAttribute('data-rate') || 0);
-    const total = (qty / 1000) * rate;
-    document.getElementById('totalPrice').innerText = '<?= e(app_currency()) ?>' + total.toFixed(2);
+    const userRate = parseFloat(opt.getAttribute('data-user-rate') || 0);
+    const baseRate = parseFloat(opt.getAttribute('data-rate') || 0);
+    const totalUser = (qty / 1000) * userRate;
+    const totalBase = (qty / 1000) * baseRate;
+    document.getElementById('totalPrice').innerText = '<?= e(app_currency()) ?>' + totalUser.toFixed(2);
 
-    // Balance check
-    const userBalEl = document.getElementById('userBalanceDisplay');
-    const userBal = parseFloat(userBalEl ? userBalEl.getAttribute('data-balance') : 0);
+    // Balance check against base balance
+    const userBalBase = <?= (float)$user['balance'] ?>;
     const warnEl = document.getElementById('insufficientWarning');
     const submitBtn = document.getElementById('submitOrderBtn');
 
-    if (total > userBal) {
+    if (totalBase > userBalBase) {
         warnEl.classList.remove('hidden');
     } else {
         warnEl.classList.add('hidden');

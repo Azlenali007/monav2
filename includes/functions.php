@@ -113,15 +113,33 @@ function app_tagline(): string {
 }
 
 function app_currency(): string {
-    $s = get_setting('currency');
-    if ($s !== null && $s !== '') return $s;
-    return defined('APP_CURRENCY') ? APP_CURRENCY : '₹';
+    $userCurr = get_user_currency();
+    return $userCurr['symbol'] ?? (defined('APP_CURRENCY') ? APP_CURRENCY : '₹');
 }
 
 function app_currency_code(): string {
-    $s = get_setting('currency_code');
-    if ($s !== null && $s !== '') return $s;
-    return defined('APP_CURRENCY_CODE') ? APP_CURRENCY_CODE : 'INR';
+    $userCurr = get_user_currency();
+    return $userCurr['code'] ?? (defined('APP_CURRENCY_CODE') ? APP_CURRENCY_CODE : 'INR');
+}
+
+function app_base_currency(): string {
+    $base = get_base_currency();
+    return $base['symbol'] ?? '₹';
+}
+
+function app_base_currency_code(): string {
+    $base = get_base_currency();
+    return $base['code'] ?? 'INR';
+}
+
+function get_user_rate(float|int|string $baseAmount): float {
+    $val = (float)$baseAmount;
+    $userCurr = get_user_currency();
+    $baseCurr = get_base_currency();
+    if ($userCurr['code'] !== $baseCurr['code']) {
+        return convert_currency($val, $baseCurr['code'], $userCurr['code']);
+    }
+    return $val;
 }
 
 function is_maintenance_mode(): bool {
