@@ -130,17 +130,17 @@ require_once __DIR__ . '/includes/header.php';
                     <?= CSRF::field() ?>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Full Name or Username</label>
-                        <input type="text" name="username" required placeholder="Aaris Ali" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
+                        <input type="text" name="username" required placeholder="Your Name" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
                     </div>
 
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
-                        <input type="email" name="email" required placeholder="aarisali@gmail.com" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
+                        <input type="email" name="email" required placeholder="name@example.com" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
                     </div>
 
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Phone Number (Optional)</label>
-                        <input type="tel" name="phone" placeholder="+91 98765 43210" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
+                        <input type="tel" name="phone" placeholder="+1 555 000 0000" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">

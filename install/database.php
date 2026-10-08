@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $host = trim($_POST['db_host'] ?? 'localhost');
+$port = trim($_POST['db_port'] ?? '3306');
 $name = trim($_POST['db_name'] ?? '');
 $user = trim($_POST['db_user'] ?? '');
 $pass = (string)($_POST['db_pass'] ?? '');
@@ -29,7 +30,7 @@ if (empty($name) || empty($user)) {
 }
 
 try {
-    $dsn = "mysql:host={$host};dbname={$name};charset=utf8mb4";
+    $dsn = "mysql:host={$host};port={$port};dbname={$name};charset=utf8mb4";
     $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_TIMEOUT => 5
@@ -38,7 +39,7 @@ try {
     echo json_encode(['success' => true, 'message' => 'Connected successfully!']);
 } catch (PDOException $e) {
     try {
-        $dsnHost = "mysql:host={$host};charset=utf8mb4";
+        $dsnHost = "mysql:host={$host};port={$port};charset=utf8mb4";
         $pdo = new PDO($dsnHost, $user, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 5]);
         echo json_encode(['success' => true, 'message' => 'Server connected! Database will be created if needed.']);
     } catch (PDOException $ex) {

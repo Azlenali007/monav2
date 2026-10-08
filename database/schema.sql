@@ -159,7 +159,7 @@ CREATE TABLE `ticket_messages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================================
--- SEED INITIAL CONFIGURATION & ADMIN/DEMO DATA
+-- SEED INITIAL CONFIGURATION & DEFAULT DATA
 -- =====================================================================
 INSERT INTO `settings` (`key`, `value`) VALUES
 ('site_name', 'SMM Panel'),
@@ -202,21 +202,21 @@ INSERT INTO `services` (`id`, `category_id`, `name`, `rate_per_1000`, `min_quant
 (501, 7, 'Facebook Page Likes & Followers [High Quality - Non Drop]', 80.0000, 100, 500000, 'Instant Start', 'Worldwide page likes and followers with 30 days refill guarantee.', 'active'),
 (601, 8, 'Twitter (X) Followers [Real Looking Accounts]', 95.0000, 100, 100000, 'Starts in 1 Hour', 'Active Twitter profiles with bio & avatars. Safe, stable and high quality.', 'active');
 
--- Default Demo Orders for Aaris Ali (#1024)
+-- Default Initial Orders (#1024)
 INSERT INTO `orders` (`id`, `user_id`, `service_id`, `link`, `quantity`, `charge`, `start_count`, `remains`, `status`, `created_at`) VALUES
 (10254, 1024, 101, 'https://instagram.com/aarisali', 1000, 35.0000, 4200, 200, 'processing', '2025-05-12 16:32:00'),
-(10253, 1024, 201, 'https://youtube.com/watch?v=smmDemo123', 5000, 120.0000, 1240, 0, 'completed', '2025-05-11 18:10:00'),
+(10253, 1024, 201, 'https://youtube.com/watch?v=smmGrowth123', 5000, 120.0000, 1240, 0, 'completed', '2025-05-11 18:10:00'),
 (10252, 1024, 301, 'https://t.me/techgrowthindia', 2000, 90.0000, 1500, 120, 'processing', '2025-05-10 13:45:00'),
 (10251, 1024, 102, 'https://instagram.com/p/C67890123', 1000, 20.0000, 850, 0, 'completed', '2025-05-09 19:20:00');
 
--- Default Demo Transactions for Aaris Ali (#1024)
+-- Default Transactions (#1024)
 INSERT INTO `transactions` (`user_id`, `type`, `amount`, `gateway`, `gateway_txn_id`, `status`, `note`, `created_at`) VALUES
 (1024, 'deposit', 500.0000, 'Razorpay', 'pay_rzp_8941720', 'completed', 'Added funds via Razorpay UPI', '2025-05-12 16:12:00'),
 (1024, 'order', -35.0000, 'system', 'ord_10254', 'completed', 'Order #10254: Instagram Followers', '2025-05-12 16:32:00'),
 (1024, 'deposit', 200.0000, 'Razorpay', 'pay_rzp_6291054', 'completed', 'Added funds via Razorpay Cards', '2025-05-10 11:20:00'),
 (1024, 'order', -120.0000, 'system', 'ord_10253', 'completed', 'Order #10253: YouTube Views', '2025-05-10 18:15:00');
 
--- Default Demo Support Tickets
+-- Default Support Tickets
 INSERT INTO `tickets` (`id`, `user_id`, `order_id`, `subject`, `status`, `priority`, `created_at`) VALUES
 (1024, 1024, 10254, 'Order not started yet', 'open', 'high', '2025-05-12 11:20:00'),
 (1023, 1024, NULL, 'Payment issue with QR code', 'in_progress', 'medium', '2025-05-10 18:15:00'),

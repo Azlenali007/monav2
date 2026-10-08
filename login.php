@@ -96,14 +96,13 @@ require_once __DIR__ . '/includes/header.php';
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">Email Address</label>
                     <div class="relative">
-                        <input type="email" name="email" required placeholder="aarisali@gmail.com" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
+                        <input type="email" name="email" required placeholder="name@example.com" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
                     </div>
                 </div>
 
                 <div>
                     <div class="flex items-center justify-between mb-1.5">
                         <label class="block text-xs font-bold text-slate-700">Password</label>
-                        <span class="text-xs font-semibold text-slate-400">Default demo: password123</span>
                     </div>
                     <div class="relative">
                         <input type="password" name="password" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
