@@ -88,7 +88,8 @@ CREATE TABLE `services` (
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`provider_id`) REFERENCES `providers`(`id`) ON DELETE SET NULL,
-  INDEX `idx_service_status` (`status`)
+  INDEX `idx_service_status` (`status`),
+  INDEX `idx_service_provider_mapping` (`provider_id`, `provider_service_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 6. ORDERS TABLE

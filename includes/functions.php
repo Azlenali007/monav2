@@ -313,3 +313,101 @@ function call_provider_api(string $apiUrl, array $postData, int $timeout = 15): 
 
     return $decoded;
 }
+
+/**
+ * =====================================================================
+ * FUTURE FEATURE ARCHITECTURE: PROVIDER SERVICE IMPORT HELPERS
+ * Foundation routines for normalizing diverse external API schemas,
+ * duplicate detection, category matching, and pricing markup.
+ * =====================================================================
+ */
+
+/**
+ * Calculates selling rate from provider's original rate using percentage or fixed markup
+ */
+function calculate_service_markup(float $originalRate, float $markupPercent = 0.0, float $markupFixed = 0.0): float {
+    $markupAmount = ($originalRate * ($markupPercent / 100)) + $markupFixed;
+    return round($originalRate + $markupAmount, 4);
+}
+
+/**
+ * Normalizes raw service payload from different SMM provider API formats
+ * into the standardized panel schema while safely handling optional fields.
+ */
+function normalize_provider_service(array $raw, float $markupPercent = 0.0, float $markupFixed = 0.0): array {
+    $providerServiceId = (string)($raw['service'] ?? $raw['service_id'] ?? $raw['id'] ?? '');
+    $name = trim((string)($raw['name'] ?? $raw['title'] ?? 'Unnamed Service'));
+    $originalRate = (float)($raw['rate'] ?? $raw['price'] ?? 0.0);
+    $sellingRate = calculate_service_markup($originalRate, $markupPercent, $markupFixed);
+    $minQty = (int)($raw['min'] ?? $raw['min_quantity'] ?? 10);
+    $maxQty = (int)($raw['max'] ?? $raw['max_quantity'] ?? 100000);
+    $category = trim((string)($raw['category'] ?? 'Other'));
+    $type = strtolower(trim((string)($raw['type'] ?? 'default')));
+    $dripfeed = !empty($raw['dripfeed']);
+    $refill = !empty($raw['refill']);
+    $cancel = !empty($raw['cancel']);
+    $description = isset($raw['desc']) ? (string)$raw['desc'] : (isset($raw['description']) ? (string)$raw['description'] : null);
+
+    return [
+        'provider_service_id' => $providerServiceId,
+        'name'                => $name,
+        'original_rate'       => $originalRate,
+        'rate_per_1000'       => $sellingRate,
+        'min_quantity'        => max(1, $minQty),
+        'max_quantity'        => max($minQty, $maxQty),
+        'category_name'       => $category,
+        'service_type'        => in_array($type, ['custom_comments', 'package', 'poll']) ? $type : 'default',
+        'speed'               => 'Starts in 1-2 Hours',
+        'description'         => $description,
+        'supports_refill'     => $refill,
+        'supports_cancel'     => $cancel,
+        'supports_dripfeed'   => $dripfeed
+    ];
+}
+
+/**
+ * Duplicate Prevention Engine:
+ * Verifies if an external provider service has already been imported into the catalog.
+ */
+function is_provider_service_imported(int $providerId, string $providerServiceId): bool {
+    if ($providerId <= 0 || empty($providerServiceId)) {
+        return false;
+    }
+    try {
+        $db = Database::getConnection();
+        $stmt = $db->prepare("SELECT id FROM services WHERE provider_id = :pid AND provider_service_id = :psid LIMIT 1");
+        $stmt->execute(['pid' => $providerId, 'psid' => $providerServiceId]);
+        return (bool)$stmt->fetch();
+    } catch (\Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Intelligent Category Matcher:
+ * Maps external category strings to existing panel category records.
+ */
+function find_matching_category_id(string $providerCategoryName, int $defaultCategoryId = 1): int {
+    if (empty($providerCategoryName)) {
+        return $defaultCategoryId;
+    }
+    try {
+        $db = Database::getConnection();
+        $stmt = $db->query("SELECT id, name, platform FROM categories WHERE status = 'active' ORDER BY sort_order ASC");
+        $categories = $stmt->fetchAll();
+
+        $cleanName = strtolower($providerCategoryName);
+        foreach ($categories as $cat) {
+            $catTitle = strtolower($cat['name']);
+            $catPlatform = strtolower($cat['platform']);
+
+            if (str_contains($cleanName, $catPlatform) || str_contains($cleanName, $catTitle)) {
+                return (int)$cat['id'];
+            }
+        }
+    } catch (\Throwable $e) {
+        // Fall back to default
+    }
+    return $defaultCategoryId;
+}
+

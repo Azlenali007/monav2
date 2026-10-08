@@ -115,6 +115,9 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="flex items-center gap-3">
                 <span class="text-xs text-slate-400 font-bold"><?= count($services) ?> Total Services</span>
+                <a href="/admin/import-services.php" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
+                    <span>⚡</span> Import from Provider (Coming Soon)
+                </a>
                 <button type="button" onclick="document.getElementById('addSvcForm').classList.toggle('hidden')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all flex items-center gap-1.5">
                     <span>+</span> Add Service
                 </button>
