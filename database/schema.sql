@@ -7,6 +7,10 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS `user_announcement_dismissals`;
 DROP TABLE IF EXISTS `announcements`;
+DROP TABLE IF EXISTS `referral_commissions`;
+DROP TABLE IF EXISTS `referrals`;
+DROP TABLE IF EXISTS `payment_methods`;
+DROP TABLE IF EXISTS `currencies`;
 DROP TABLE IF EXISTS `ticket_messages`;
 DROP TABLE IF EXISTS `tickets`;
 DROP TABLE IF EXISTS `transactions`;
@@ -39,11 +43,14 @@ CREATE TABLE `users` (
   `role` ENUM('user', 'admin', 'support') NOT NULL DEFAULT 'user',
   `status` ENUM('active', 'suspended', 'banned') NOT NULL DEFAULT 'active',
   `api_key` VARCHAR(64) NOT NULL UNIQUE,
+  `referral_code` VARCHAR(32) NULL UNIQUE,
+  `referred_by` INT UNSIGNED NULL,
   `email_verified` TINYINT(1) NOT NULL DEFAULT 0,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_users_role` (`role`),
-  INDEX `idx_users_status` (`status`)
+  INDEX `idx_users_status` (`status`),
+  INDEX `idx_users_referral_code` (`referral_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 3. PROVIDERS TABLE (External API providers)
@@ -189,6 +196,75 @@ CREATE TABLE `user_announcement_dismissals` (
   FOREIGN KEY (`announcement_id`) REFERENCES `announcements`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 12. REFERRALS TABLE
+CREATE TABLE `referrals` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `referrer_id` INT UNSIGNED NOT NULL,
+  `referred_id` INT UNSIGNED NOT NULL UNIQUE,
+  `referral_code` VARCHAR(32) NOT NULL,
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `total_commission` DECIMAL(12, 4) NOT NULL DEFAULT 0.0000,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`referrer_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`referred_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  INDEX `idx_referrals_referrer` (`referrer_id`),
+  INDEX `idx_referrals_code` (`referral_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 13. REFERRAL COMMISSIONS TABLE
+CREATE TABLE `referral_commissions` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `referrer_id` INT UNSIGNED NOT NULL,
+  `referred_id` INT UNSIGNED NOT NULL,
+  `transaction_id` INT UNSIGNED NULL,
+  `order_id` INT UNSIGNED NULL,
+  `event_type` ENUM('first_deposit', 'deposit', 'first_order', 'order') NOT NULL DEFAULT 'deposit',
+  `source_amount` DECIMAL(12, 4) NOT NULL,
+  `commission_rate` DECIMAL(8, 2) NOT NULL,
+  `commission_amount` DECIMAL(12, 4) NOT NULL,
+  `status` ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'approved',
+  `note` VARCHAR(255) NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`referrer_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`referred_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  INDEX `idx_ref_comm_status` (`status`),
+  INDEX `idx_ref_comm_referrer` (`referrer_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 14. CURRENCIES TABLE (Dynamic Multi-Currency System)
+CREATE TABLE `currencies` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `code` VARCHAR(10) NOT NULL UNIQUE,
+  `symbol` VARCHAR(10) NOT NULL,
+  `name` VARCHAR(50) NOT NULL,
+  `exchange_rate` DECIMAL(14, 6) NOT NULL DEFAULT 1.000000,
+  `is_base` TINYINT(1) NOT NULL DEFAULT 0,
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_currency_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 15. PAYMENT METHODS TABLE (Production Multi-Gateway Architecture)
+CREATE TABLE `payment_methods` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL,
+  `code` VARCHAR(50) NOT NULL UNIQUE,
+  `type` ENUM('automatic', 'manual') NOT NULL DEFAULT 'automatic',
+  `icon` VARCHAR(10) NOT NULL DEFAULT '💳',
+  `min_amount` DECIMAL(12, 4) NOT NULL DEFAULT 100.0000,
+  `max_amount` DECIMAL(12, 4) NOT NULL DEFAULT 50000.0000,
+  `fee_percent` DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+  `instructions` TEXT NULL,
+  `config_data` TEXT NULL,
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- =====================================================================
 -- SEED INITIAL CONFIGURATION & DEFAULT DATA
 -- =====================================================================
@@ -201,13 +277,35 @@ INSERT INTO `settings` (`key`, `value`) VALUES
 ('razorpay_key_secret', 'YourSecretKeyHere'),
 ('min_deposit', '100'),
 ('max_deposit', '50000'),
-('maintenance_mode', '0');
+('maintenance_mode', '0'),
+('referral_enabled', '1'),
+('referral_commission_type', 'percentage'),
+('referral_commission_rate', '5.00'),
+('referral_trigger_event', 'every_deposit'),
+('referral_min_deposit', '100'),
+('referral_max_commission', '1000'),
+('referral_default_status', 'approved');
+
+-- Default Seed Currencies (INR Base, USD, EUR, GBP, BRL)
+INSERT INTO `currencies` (`code`, `symbol`, `name`, `exchange_rate`, `is_base`, `status`) VALUES
+('INR', '₹', 'Indian Rupee', 1.000000, 1, 'active'),
+('USD', '$', 'US Dollar', 0.011600, 0, 'active'),
+('EUR', '€', 'Euro', 0.010800, 0, 'active'),
+('GBP', '£', 'British Pound', 0.009200, 0, 'active'),
+('BRL', 'R$', 'Brazilian Real', 0.065000, 0, 'active');
+
+-- Default Seed Payment Gateways
+INSERT INTO `payment_methods` (`name`, `code`, `type`, `icon`, `min_amount`, `max_amount`, `fee_percent`, `instructions`, `config_data`, `status`, `sort_order`) VALUES
+('Razorpay Instant (UPI / Cards)', 'razorpay', 'automatic', '⚡', 100.0000, 50000.0000, 0.00, 'Automated instant checkout supporting UPI, Credit/Debit cards, and Net Banking.', '{"key_id":"rzp_test_YourKeyHere"}', 'active', 1),
+('Paytm / UPI QR & Manual Deposit', 'paytm_qr', 'manual', '📲', 50.0000, 100000.0000, 0.00, 'Scan the official UPI QR code or pay to UPI ID smmpanel@upi, then submit your 12-digit UTR/Transaction Reference ID below for instant approval.', '{"upi_id":"smmpanel@upi"}', 'active', 2),
+('Cryptomus / Crypto USDT (TRC-20)', 'cryptomus', 'automatic', '🪙', 500.0000, 500000.0000, 1.00, 'Instant crypto deposit with USDT, BTC, ETH, and LTC on TRC20, BEP20 or Polygon.', '{}', 'active', 3),
+('Bank Wire / Manual Transfer', 'manual_bank', 'manual', '🏦', 500.0000, 1000000.0000, 0.00, 'Direct NEFT / IMPS / RTGS wire transfer. Please attach your payment slip or bank reference number.', '{"account_name":"SMM Panel Digital","account_number":"123456789012","ifsc":"HDFC0001234","bank_name":"HDFC Bank"}', 'active', 4);
 
 -- Initial Admin Account: username: admin / password: password123
 -- Initial User Account: username: aaris / password: password123
-INSERT INTO `users` (`id`, `username`, `email`, `password`, `phone`, `balance`, `spent`, `role`, `status`, `api_key`, `email_verified`) VALUES
-(1001, 'admin', 'admin@smmpanel.local', '$2y$12$R.O44hC46gE8i1a0MvV9EeeYvA5f9V7Z3d.gO8Z3D/a6F5e9qLhQW', '+91 98765 00000', 50000.0000, 0.0000, 'admin', 'active', 'adm_839f284c17b44d28e71c9902', 1),
-(1024, 'Aaris Ali', 'aarisali@gmail.com', '$2y$12$R.O44hC46gE8i1a0MvV9EeeYvA5f9V7Z3d.gO8Z3D/a6F5e9qLhQW', '+91 98765 43210', 850.5000, 155.0000, 'user', 'active', 'usr_749e192a63d91b87d21c4301', 1);
+INSERT INTO `users` (`id`, `username`, `email`, `password`, `phone`, `balance`, `spent`, `role`, `status`, `api_key`, `referral_code`, `referred_by`, `email_verified`) VALUES
+(1001, 'admin', 'admin@smmpanel.local', '$2y$12$R.O44hC46gE8i1a0MvV9EeeYvA5f9V7Z3d.gO8Z3D/a6F5e9qLhQW', '+91 98765 00000', 50000.0000, 0.0000, 'admin', 'active', 'adm_839f284c17b44d28e71c9902', 'REFADMIN1001', NULL, 1),
+(1024, 'Aaris Ali', 'aarisali@gmail.com', '$2y$12$R.O44hC46gE8i1a0MvV9EeeYvA5f9V7Z3d.gO8Z3D/a6F5e9qLhQW', '+91 98765 43210', 850.5000, 155.0000, 'user', 'active', 'usr_749e192a63d91b87d21c4301', 'REFAARIS1024', NULL, 1);
 
 -- Default Categories
 INSERT INTO `categories` (`id`, `name`, `platform`, `sort_order`, `status`) VALUES

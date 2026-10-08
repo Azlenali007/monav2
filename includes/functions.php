@@ -222,9 +222,90 @@ function render_maintenance_page(): void {
     exit;
 }
 
-function format_currency(float|int|string $amount): string {
+function get_base_currency(): array {
+    $currencies = get_active_currencies();
+    foreach ($currencies as $curr) {
+        if (!empty($curr['is_base'])) {
+            return $curr;
+        }
+    }
+    return ['code' => 'INR', 'symbol' => '₹', 'name' => 'Indian Rupee', 'exchange_rate' => 1.0, 'is_base' => 1];
+}
+
+function get_active_currencies(): array {
+    if (isset($GLOBALS['_app_currencies_cache'])) {
+        return $GLOBALS['_app_currencies_cache'];
+    }
+    try {
+        $db = Database::getConnection();
+        $stmt = $db->query("SELECT * FROM currencies WHERE status = 'active' ORDER BY is_base DESC, code ASC");
+        $currencies = $stmt->fetchAll();
+        if (empty($currencies)) {
+            $currencies = [
+                ['code' => 'INR', 'symbol' => '₹', 'name' => 'Indian Rupee', 'exchange_rate' => 1.0, 'is_base' => 1],
+                ['code' => 'USD', 'symbol' => '$', 'name' => 'US Dollar', 'exchange_rate' => 0.0116, 'is_base' => 0]
+            ];
+        }
+        $GLOBALS['_app_currencies_cache'] = $currencies;
+        return $currencies;
+    } catch (\Throwable $e) {
+        return [
+            ['code' => 'INR', 'symbol' => '₹', 'name' => 'Indian Rupee', 'exchange_rate' => 1.0, 'is_base' => 1]
+        ];
+    }
+}
+
+function get_user_currency(): array {
+    $currencies = get_active_currencies();
+    $chosenCode = $_SESSION['user_currency'] ?? null;
+    if ($chosenCode) {
+        foreach ($currencies as $curr) {
+            if ($curr['code'] === $chosenCode) {
+                return $curr;
+            }
+        }
+    }
+    return get_base_currency();
+}
+
+function convert_currency(float $amount, string $fromCode, string $toCode): float {
+    if ($fromCode === $toCode) {
+        return $amount;
+    }
+    $currencies = get_active_currencies();
+    $rates = [];
+    foreach ($currencies as $c) {
+        $rates[$c['code']] = (float)$c['exchange_rate'];
+    }
+    $fromRate = $rates[$fromCode] ?? 1.0;
+    $toRate = $rates[$toCode] ?? 1.0;
+
+    if ($fromRate <= 0) $fromRate = 1.0;
+    $baseAmount = $amount / $fromRate;
+    return round($baseAmount * $toRate, 4);
+}
+
+function format_currency(float|int|string $amount, ?string $currencyCode = null, bool $convertFromBase = true): string {
     $val = (float)$amount;
-    return app_currency() . number_format($val, 2);
+    $userCurr = get_user_currency();
+    $targetCode = $currencyCode ?: $userCurr['code'];
+    $targetSymbol = $userCurr['symbol'] ?? '₹';
+
+    if ($currencyCode && $currencyCode !== $userCurr['code']) {
+        foreach (get_active_currencies() as $c) {
+            if ($c['code'] === $currencyCode) {
+                $targetSymbol = $c['symbol'];
+                break;
+            }
+        }
+    }
+
+    $baseCurr = get_base_currency();
+    if ($convertFromBase && $targetCode !== $baseCurr['code']) {
+        $val = convert_currency($val, $baseCurr['code'], $targetCode);
+    }
+
+    return $targetSymbol . number_format($val, 2);
 }
 
 function redirect(string $path): never {
@@ -410,4 +491,253 @@ function find_matching_category_id(string $providerCategoryName, int $defaultCat
     }
     return $defaultCategoryId;
 }
+
+/**
+ * =====================================================================
+ * REFER & EARN / REFERRAL SYSTEM ENGINE
+ * =====================================================================
+ */
+
+function get_user_referral_code(int $userId): string {
+    try {
+        $db = Database::getConnection();
+        $stmt = $db->prepare("SELECT referral_code FROM users WHERE id = :id LIMIT 1");
+        $stmt->execute(['id' => $userId]);
+        $code = $stmt->fetchColumn();
+        if (!empty($code)) {
+            return (string)$code;
+        }
+        $newCode = 'REF' . $userId . strtoupper(bin2hex(random_bytes(2)));
+        $upd = $db->prepare("UPDATE users SET referral_code = :code WHERE id = :id");
+        $upd->execute(['code' => $newCode, 'id' => $userId]);
+        return $newCode;
+    } catch (\Throwable $e) {
+        return 'REF' . $userId;
+    }
+}
+
+function process_referral_commission(int $userId, float $amount, string $eventType, ?int $txnId = null, ?int $orderId = null): ?int {
+    if (get_setting('referral_enabled', '1') !== '1') {
+        return null;
+    }
+
+    try {
+        $db = Database::getConnection();
+        $stmt = $db->prepare("SELECT referred_by FROM users WHERE id = :uid LIMIT 1");
+        $stmt->execute(['uid' => $userId]);
+        $referrerId = (int)$stmt->fetchColumn();
+
+        if ($referrerId <= 0 || $referrerId === $userId) {
+            return null;
+        }
+
+        $triggerEvent = get_setting('referral_trigger_event', 'every_deposit');
+        if ($triggerEvent === 'first_deposit') {
+            if ($eventType !== 'deposit') return null;
+            $prev = $db->prepare("SELECT COUNT(*) FROM transactions WHERE user_id = :uid AND type = 'deposit' AND status = 'completed'");
+            $prev->execute(['uid' => $userId]);
+            if ((int)$prev->fetchColumn() > 1) {
+                return null;
+            }
+        } elseif ($triggerEvent === 'first_order') {
+            if ($eventType !== 'order') return null;
+            $prev = $db->prepare("SELECT COUNT(*) FROM orders WHERE user_id = :uid");
+            $prev->execute(['uid' => $userId]);
+            if ((int)$prev->fetchColumn() > 1) {
+                return null;
+            }
+        }
+
+        $minQualifying = (float)get_setting('referral_min_deposit', '100');
+        if ($amount < $minQualifying) {
+            return null;
+        }
+
+        $commissionType = get_setting('referral_commission_type', 'percentage');
+        $commissionRate = (float)get_setting('referral_commission_rate', '5.00');
+        $maxCommission = (float)get_setting('referral_max_commission', '1000');
+
+        if ($commissionType === 'fixed') {
+            $commissionAmount = $commissionRate;
+        } else {
+            $commissionAmount = round(($amount * ($commissionRate / 100)), 4);
+        }
+
+        if ($maxCommission > 0 && $commissionAmount > $maxCommission) {
+            $commissionAmount = $maxCommission;
+        }
+
+        if ($commissionAmount <= 0) {
+            return null;
+        }
+
+        $defaultStatus = get_setting('referral_default_status', 'approved');
+
+        $db->beginTransaction();
+
+        $ins = $db->prepare("
+            INSERT INTO referral_commissions (referrer_id, referred_id, transaction_id, order_id, event_type, source_amount, commission_rate, commission_amount, status, note)
+            VALUES (:rid, :refid, :txnid, :oid, :ev, :src, :rate, :comm, :st, :note)
+        ");
+        $ins->execute([
+            'rid' => $referrerId,
+            'refid' => $userId,
+            'txnid' => $txnId,
+            'oid' => $orderId,
+            'ev' => $eventType,
+            'src' => $amount,
+            'rate' => $commissionRate,
+            'comm' => $commissionAmount,
+            'st' => $defaultStatus,
+            'note' => ucfirst($eventType) . ' commission'
+        ]);
+        $commissionId = (int)$db->lastInsertId();
+
+        $db->prepare("UPDATE referrals SET total_commission = total_commission + :comm WHERE referrer_id = :rid AND referred_id = :refid")
+           ->execute(['comm' => $commissionAmount, 'rid' => $referrerId, 'refid' => $userId]);
+
+        if ($defaultStatus === 'approved') {
+            $credit = $db->prepare("UPDATE users SET balance = balance + :comm WHERE id = :rid");
+            $credit->execute(['comm' => $commissionAmount, 'rid' => $referrerId]);
+
+            $db->prepare("
+                INSERT INTO transactions (user_id, type, amount, gateway, gateway_txn_id, status, note)
+                VALUES (:rid, 'bonus', :comm, 'system', :txnid, 'completed', :note)
+            ")->execute([
+                'rid' => $referrerId,
+                'comm' => $commissionAmount,
+                'txnid' => 'ref_' . $commissionId,
+                'note' => 'Referral commission earned from User #' . $userId
+            ]);
+        }
+
+        $db->commit();
+        return $commissionId;
+    } catch (\Throwable $e) {
+        if (isset($db) && $db->inTransaction()) {
+            $db->rollBack();
+        }
+        error_log("process_referral_commission error: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * =====================================================================
+ * CONCURRENCY & WALLET SECURITY ENGINE
+ * Atomic, race-condition protected wallet debit and credit.
+ * =====================================================================
+ */
+
+function wallet_debit(PDO $db, int $userId, float $amount, string $note, ?int $orderId = null): bool {
+    if ($amount <= 0) return true;
+
+    $stmt = $db->prepare("UPDATE users SET balance = balance - :amt, spent = spent + :amt WHERE id = :uid AND balance >= :amt");
+    $stmt->execute(['amt' => $amount, 'uid' => $userId]);
+
+    if ($stmt->rowCount() === 0) {
+        return false;
+    }
+
+    $ins = $db->prepare("
+        INSERT INTO transactions (user_id, order_id, type, amount, gateway, gateway_txn_id, status, note)
+        VALUES (:uid, :oid, 'order', :amt, 'system', :txnid, 'completed', :note)
+    ");
+    $ins->execute([
+        'uid' => $userId,
+        'oid' => $orderId,
+        'amt' => -$amount,
+        'txnid' => 'ord_' . ($orderId ?: bin2hex(random_bytes(4))),
+        'note' => $note
+    ]);
+    return true;
+}
+
+function wallet_credit(PDO $db, int $userId, float $amount, string $gateway, ?string $txnId = null, string $note = ''): bool {
+    if ($amount <= 0) return false;
+
+    $stmt = $db->prepare("UPDATE users SET balance = balance + :amt WHERE id = :uid");
+    $stmt->execute(['amt' => $amount, 'uid' => $userId]);
+
+    $ins = $db->prepare("
+        INSERT INTO transactions (user_id, type, amount, gateway, gateway_txn_id, status, note)
+        VALUES (:uid, 'deposit', :amt, :gw, :txnid, 'completed', :note)
+    ");
+    $ins->execute([
+        'uid' => $userId,
+        'amt' => $amount,
+        'gw' => $gateway,
+        'txnid' => $txnId ?: 'dep_' . bin2hex(random_bytes(6)),
+        'note' => $note ?: "Added funds via {$gateway}"
+    ]);
+
+    // Trigger referral commission if eligible
+    process_referral_commission($userId, $amount, 'deposit', (int)$db->lastInsertId(), null);
+
+    return true;
+}
+
+/**
+ * =====================================================================
+ * PAYMENT GATEWAY REPOSITORY
+ * =====================================================================
+ */
+
+function get_payment_methods(bool $activeOnly = true): array {
+    try {
+        $db = Database::getConnection();
+        $sql = "SELECT * FROM payment_methods";
+        if ($activeOnly) {
+            $sql .= " WHERE status = 'active'";
+        }
+        $sql .= " ORDER BY sort_order ASC, id ASC";
+        $stmt = $db->query($sql);
+        $methods = $stmt->fetchAll();
+        if (!empty($methods)) {
+            return $methods;
+        }
+    } catch (\Throwable $e) {
+        // Fall back to default
+    }
+
+    return [
+        [
+            'id' => 1,
+            'name' => 'Razorpay Instant (UPI / Cards)',
+            'code' => 'razorpay',
+            'type' => 'automatic',
+            'icon' => '⚡',
+            'min_amount' => 100,
+            'max_amount' => 50000,
+            'fee_percent' => 0,
+            'instructions' => 'Instant automated deposit using UPI, NetBanking, Credit or Debit cards.',
+            'status' => 'active'
+        ],
+        [
+            'id' => 2,
+            'name' => 'Paytm / UPI QR & Manual Deposit',
+            'code' => 'paytm_qr',
+            'type' => 'manual',
+            'icon' => '📲',
+            'min_amount' => 50,
+            'max_amount' => 100000,
+            'fee_percent' => 0,
+            'instructions' => 'Pay to UPI ID smmpanel@upi and submit your 12-digit UTR/Reference ID for instant credit verification.',
+            'status' => 'active'
+        ],
+        [
+            'id' => 3,
+            'name' => 'Cryptomus / Crypto USDT (TRC-20)',
+            'code' => 'cryptomus',
+            'type' => 'automatic',
+            'icon' => '🪙',
+            'min_amount' => 500,
+            'max_amount' => 500000,
+            'fee_percent' => 1,
+            'instructions' => 'Automated cryptocurrency payment supporting USDT, BTC, ETH and LTC.',
+            'status' => 'active'
+        ]
+    ];
+}
+
 

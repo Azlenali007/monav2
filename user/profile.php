@@ -103,6 +103,12 @@ require_once __DIR__ . '/../includes/header.php';
                 <a href="/user/profile.php?tab=password" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-extrabold transition-all <?= $tab === 'password' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 scale-[1.01]' : 'text-slate-600 hover:bg-slate-50' ?>">
                     <span>🔒</span> Security & Password
                 </a>
+                <a href="/user/referrals.php" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-extrabold transition-all text-slate-600 hover:bg-slate-50">
+                    <span>🎁</span> Refer &amp; Earn Program
+                </a>
+                <a href="/user/api.php" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-extrabold transition-all text-slate-600 hover:bg-slate-50">
+                    <span>🔌</span> Full API Documentation
+                </a>
                 <a href="/user/profile.php?tab=api" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-extrabold transition-all <?= $tab === 'api' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 scale-[1.01]' : 'text-slate-600 hover:bg-slate-50' ?>">
                     <span>⚡</span> Developer API Key
                 </a>

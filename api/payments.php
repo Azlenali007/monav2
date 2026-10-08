@@ -10,13 +10,19 @@ header('Content-Type: application/json; charset=UTF-8');
 
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 $payload = file_get_contents('php://input');
 $signature = $_SERVER['HTTP_X_RAZORPAY_SIGNATURE'] ?? '';
+$cryptomusSign = $_SERVER['HTTP_SIGN'] ?? '';
+$cryptomusKey = get_setting('cryptomus_api_key', '');
+$razorpaySecret = get_setting('razorpay_key_secret', defined('RAZORPAY_KEY_SECRET') ? RAZORPAY_KEY_SECRET : '');
 
-// Verify webhook signature
+$db = Database::getConnection();
+
+// 1. Verify Razorpay webhook signature
 if (!empty($signature) && !empty($payload)) {
-    $expectedSignature = hash_hmac('sha256', $payload, RAZORPAY_KEY_SECRET);
+    $expectedSignature = hash_hmac('sha256', $payload, $razorpaySecret);
     if (!hash_equals($expectedSignature, $signature)) {
         http_response_code(400);
         echo json_encode(['error' => 'Invalid signature']);
@@ -27,11 +33,10 @@ if (!empty($signature) && !empty($payload)) {
     if (($event['event'] ?? '') === 'payment.captured') {
         $payment = $event['payload']['payment']['entity'] ?? null;
         if ($payment) {
-            $amount = ((float)$payment['amount']) / 100; // Razorpay provides paise
-            $txnId = $payment['id'];
-            $email = $payment['email'] ?? '';
+            $amount = ((float)$payment['amount']) / 100; // Razorpay paise to rupees
+            $txnId = (string)$payment['id'];
+            $email = (string)($payment['email'] ?? '');
 
-            $db = Database::getConnection();
             $stmt = $db->prepare("SELECT id FROM users WHERE email = :email LIMIT 1");
             $stmt->execute(['email' => $email]);
             $user = $stmt->fetch();
@@ -42,14 +47,35 @@ if (!empty($signature) && !empty($payload)) {
                 $check->execute(['txnid' => $txnId]);
                 if (!$check->fetch()) {
                     $db->beginTransaction();
-                    $db->prepare("UPDATE users SET balance = balance + :amt WHERE id = :uid")->execute(['amt' => $amount, 'uid' => $user['id']]);
-                    $db->prepare("INSERT INTO transactions (user_id, type, amount, gateway, gateway_txn_id, status, note) VALUES (:uid, 'deposit', :amt, 'Razorpay', :txnid, 'completed', 'Webhook auto credit')")->execute([
-                        'uid' => $user['id'],
-                        'amt' => $amount,
-                        'txnid' => $txnId
-                    ]);
+                    wallet_credit($db, (int)$user['id'], $amount, 'Razorpay', $txnId, 'Razorpay webhook auto credit');
                     $db->commit();
                 }
+            }
+        }
+    }
+}
+
+// 2. Verify Cryptomus payment callback
+if (!empty($cryptomusSign) && !empty($payload) && !empty($cryptomusKey)) {
+    $data = json_decode($payload, true);
+    if (is_array($data) && isset($data['sign'])) {
+        $receivedSign = $data['sign'];
+        unset($data['sign']);
+        $expectedSign = md5(base64_encode(json_encode($data, JSON_UNESCAPED_UNICODE)) . $cryptomusKey);
+
+        if (hash_equals($expectedSign, $receivedSign) && ($data['status'] ?? '') === 'paid') {
+            $orderId = $data['order_id'] ?? '';
+            $amount = (float)($data['merchant_amount'] ?? $data['amount'] ?? 0);
+            
+            // Find user from order_id or pending transaction
+            $findTxn = $db->prepare("SELECT user_id FROM transactions WHERE gateway_txn_id = :txnid LIMIT 1");
+            $findTxn->execute(['txnid' => $orderId]);
+            $txnRow = $findTxn->fetch();
+
+            if ($txnRow && $amount > 0) {
+                $db->beginTransaction();
+                wallet_credit($db, (int)$txnRow['user_id'], $amount, 'Cryptomus USDT', $orderId, 'Cryptomus crypto webhook auto credit');
+                $db->commit();
             }
         }
     }

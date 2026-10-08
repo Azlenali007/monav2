@@ -1,6 +1,6 @@
 {
   "name": "SMM Panel - Social Media Growth Platform",
-  "description": "Production SMM Panel with user portal, admin dashboard, automated order processing, provider API service import, announcement popups, and payment gateway integration.",
+  "description": "Production SMM Panel with user portal, admin dashboard, automated order processing, provider API service import, announcement popups, multi-currency engine, referral program, payment gateways, and PWA.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

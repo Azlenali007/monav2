@@ -19,6 +19,17 @@ if (Auth::check()) {
 $allowRegistration = get_setting('allow_registration', '1') === '1';
 $error = null;
 
+// Track referral code from URL or existing 30-day cookie
+$referralCode = trim($_GET['ref'] ?? $_COOKIE['smm_ref'] ?? '');
+if (!empty($_GET['ref'])) {
+    setcookie('smm_ref', $referralCode, [
+        'expires' => time() + (86400 * 30),
+        'path' => '/',
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     CSRF::verifyOrAbort();
 
@@ -30,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim($_POST['phone'] ?? '');
         $password = (string)($_POST['password'] ?? '');
         $confirmPassword = (string)($_POST['password_confirm'] ?? '');
+        $submittedRefCode = trim($_POST['referral_code'] ?? $referralCode);
 
         if (empty($username) || empty($email) || empty($password)) {
             $error = "Please fill in all required fields.";
@@ -46,22 +58,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($stmt->fetch()) {
                 $error = "An account with this email or username already exists.";
             } else {
+                // Verify referrer if referral code provided
+                $referrerId = null;
+                if (!empty($submittedRefCode) && get_setting('referral_enabled', '1') === '1') {
+                    $refStmt = $db->prepare("SELECT id FROM users WHERE referral_code = :ref LIMIT 1");
+                    $refStmt->execute(['ref' => $submittedRefCode]);
+                    $refRow = $refStmt->fetch();
+                    if ($refRow) {
+                        $referrerId = (int)$refRow['id'];
+                    }
+                }
+
                 $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
                 $apiKey = 'usr_' . bin2hex(random_bytes(12));
+                $newRefCode = 'REF' . strtoupper(bin2hex(random_bytes(4)));
 
                 $insert = $db->prepare("
-                    INSERT INTO users (username, email, password, phone, balance, role, status, api_key, email_verified)
-                    VALUES (:username, :email, :password, :phone, 0.0000, 'user', 'active', :api_key, 1)
+                    INSERT INTO users (username, email, password, phone, balance, role, status, api_key, referral_code, referred_by, email_verified)
+                    VALUES (:username, :email, :password, :phone, 0.0000, 'user', 'active', :api_key, :ref_code, :ref_by, 1)
                 ");
                 $insert->execute([
                     'username' => $username,
                     'email' => $email,
                     'password' => $hashedPassword,
                     'phone' => $phone ?: null,
-                    'api_key' => $apiKey
+                    'api_key' => $apiKey,
+                    'ref_code' => $newRefCode,
+                    'ref_by' => $referrerId
                 ]);
 
                 $newUserId = (int)$db->lastInsertId();
+
+                // If referred by someone, record in referrals table
+                if ($referrerId && $referrerId !== $newUserId) {
+                    try {
+                        $refInsert = $db->prepare("
+                            INSERT INTO referrals (referrer_id, referred_id, referral_code, status, total_commission)
+                            VALUES (:rid, :refid, :code, 'active', 0.0000)
+                        ");
+                        $refInsert->execute([
+                            'rid' => $referrerId,
+                            'refid' => $newUserId,
+                            'code' => $submittedRefCode
+                        ]);
+                    } catch (\Throwable $e) {
+                        // Ignore duplicate constraint
+                    }
+                }
+
+                // Clear referral cookie
+                if (isset($_COOKIE['smm_ref'])) {
+                    setcookie('smm_ref', '', time() - 3600, '/');
+                }
+
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = $newUserId;
                 $_SESSION['user_role'] = 'user';
@@ -152,6 +201,16 @@ require_once __DIR__ . '/includes/header.php';
                             <label class="block text-xs font-bold text-slate-700 mb-1">Confirm</label>
                             <input type="password" name="password_confirm" required placeholder="••••••••" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
                         </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                            <span>Referral Code (Optional)</span>
+                            <?php if (!empty($referralCode)): ?>
+                                <span class="text-[11px] text-emerald-600 font-semibold">✓ Referral link detected</span>
+                            <?php endif; ?>
+                        </label>
+                        <input type="text" name="referral_code" value="<?= e($referralCode) ?>" placeholder="e.g. REF1024AB" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono uppercase focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all">
                     </div>
 
                     <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-500/25 transition-all mt-2">

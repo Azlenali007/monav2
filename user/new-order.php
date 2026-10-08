@@ -100,6 +100,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 $db->commit();
+
+                // Trigger referral commission if order event enabled
+                process_referral_commission((int)$user['id'], $charge, 'order', null, $orderId);
+
                 set_flash('success', "Order #{$orderId} placed successfully!");
                 redirect('/user/orders.php');
             } catch (Exception $e) {

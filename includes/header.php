@@ -26,6 +26,8 @@ $adminNavLinks = [
     ['name' => 'Services', 'url' => '/admin/services.php', 'icon' => '⚡'],
     ['name' => 'Providers', 'url' => '/admin/providers.php', 'icon' => '🔌'],
     ['name' => 'Payments', 'url' => '/admin/payments.php', 'icon' => '💳'],
+    ['name' => 'Referrals', 'url' => '/admin/referrals.php', 'icon' => '🎁'],
+    ['name' => 'Currencies', 'url' => '/admin/currencies.php', 'icon' => '💱'],
     ['name' => 'Transactions', 'url' => '/admin/transactions.php', 'icon' => '📑'],
     ['name' => 'Tickets', 'url' => '/admin/tickets.php', 'icon' => '💬'],
     ['name' => 'Announcements', 'url' => '/admin/announcements.php', 'icon' => '📢'],
@@ -38,9 +40,18 @@ $adminNavLinks = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title><?= e($pageTitle) ?></title>
-    <meta name="description" content="Production SMM Panel platform with client portal, admin dashboard, automated order processing, Razorpay payment gateway, and API integration.">
+    <meta name="description" content="Production SMM Panel platform with client portal, admin dashboard, automated order processing, multi-currency support, referral earnings, and API integration.">
     <meta property="og:title" content="<?= e($pageTitle) ?>">
-    <meta property="og:description" content="Production SMM Panel platform with client portal, admin dashboard, automated order processing, Razorpay payment gateway, and API integration.">
+    <meta property="og:description" content="Production SMM Panel platform with client portal, admin dashboard, automated order processing, multi-currency support, referral earnings, and API integration.">
+
+    <!-- Progressive Web App (PWA) Manifest & Meta -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="SMM Panel">
+    <link rel="apple-touch-icon" href="/assets/icons/icon-192.svg">
 
     <!-- Tailwind CSS (via CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -252,22 +263,25 @@ $adminNavLinks = [
                     <?php if (!str_contains($currentScript, 'dashboard.php')): ?>
                     <!-- Desktop Navigation Links for sub-pages -->
                     <nav class="hidden md:flex items-center gap-1 pl-4 border-l border-slate-200">
-                        <a href="/user/dashboard.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors text-slate-600 hover:text-slate-900 hover:bg-slate-50">
+                        <a href="/user/dashboard.php" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors text-slate-600 hover:text-slate-900 hover:bg-slate-50">
                             Dashboard
                         </a>
-                        <a href="/user/new-order.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all <?= str_contains($currentScript, 'new-order.php') ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25' : 'text-blue-600 hover:bg-blue-50' ?>">
+                        <a href="/user/new-order.php" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all <?= str_contains($currentScript, 'new-order.php') ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25' : 'text-blue-600 hover:bg-blue-50' ?>">
                             + New Order
                         </a>
-                        <a href="/user/services.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'services.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                        <a href="/user/services.php" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'services.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
                             Services
                         </a>
-                        <a href="/user/orders.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'orders.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                        <a href="/user/orders.php" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'orders.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
                             Orders
                         </a>
-                        <a href="/user/transactions.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'transactions.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
-                            Transactions
+                        <a href="/user/referrals.php" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'referrals.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                            🎁 Referrals
                         </a>
-                        <a href="/user/tickets.php" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'tickets.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                        <a href="/user/api.php" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'api.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
+                            API
+                        </a>
+                        <a href="/user/tickets.php" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors <?= str_contains($currentScript, 'tickets.php') ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' ?>">
                             Support
                         </a>
                     </nav>
@@ -275,7 +289,29 @@ $adminNavLinks = [
                 </div>
 
                 <!-- Right Action Bar (Reference Header Style) -->
-                <div class="flex items-center gap-2.5 sm:gap-3">
+                <div class="flex items-center gap-2 sm:gap-2.5">
+                    <!-- Global Currency Switcher Selector -->
+                    <?php 
+                        $headerUserCurrency = get_user_currency();
+                        $headerAllCurrencies = get_active_currencies();
+                    ?>
+                    <div class="relative inline-block">
+                        <select onchange="window.switchCurrency(this.value)" class="appearance-none bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-[11px] font-extrabold pl-2.5 pr-6 py-1.5 rounded-xl border border-slate-200/60 focus:outline-none cursor-pointer transition-colors" title="Change Display Currency">
+                            <?php foreach ($headerAllCurrencies as $c): ?>
+                                <option value="<?= e($c['code']) ?>" <?= $c['code'] === $headerUserCurrency['code'] ? 'selected' : '' ?>>
+                                    <?= e($c['symbol']) ?> <?= e($c['code']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 text-[9px]">▼</span>
+                    </div>
+
+                    <!-- PWA Install Button (Shown if browser supports installation) -->
+                    <button type="button" onclick="window.installPWA()" class="pwa-install-trigger hidden px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-bold shadow-xs hover:scale-105 active:scale-95 transition-all flex items-center gap-1" title="Install App to Homescreen">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        <span class="hidden sm:inline">Install App</span>
+                    </button>
+
                     <?php if (str_contains($currentScript, 'dashboard.php')): ?>
                         <!-- 1. Small Notification Bell Icon Button -->
                         <a href="/user/dashboard.php" class="w-9 h-9 rounded-full bg-blue-50/80 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors relative" title="Notifications">

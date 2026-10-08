@@ -62,4 +62,53 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => alert.remove(), 400);
         });
     }, 5000);
+
+    // Register Progressive Web App (PWA) Service Worker
+    if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+            console.warn('PWA service worker registration skipped:', err);
+        });
+    }
+
+    // Capture PWA Install Prompt
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+        const installBtns = document.querySelectorAll('.pwa-install-trigger');
+        installBtns.forEach(btn => btn.classList.remove('hidden'));
+    });
+
+    window.installPWA = async () => {
+        if (!deferredInstallPrompt) {
+            notify.success('To install this app, tap Share on iOS or menu on Android and select "Add to Home Screen".', 'Install App');
+            return;
+        }
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        if (outcome === 'accepted') {
+            document.querySelectorAll('.pwa-install-trigger').forEach(b => b.classList.add('hidden'));
+        }
+        deferredInstallPrompt = null;
+    };
+
+    // Global Currency Switcher
+    window.switchCurrency = async (currencyCode) => {
+        try {
+            const formData = new FormData();
+            formData.append('currency', currencyCode);
+            const res = await fetch('/api/currency.php', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.success) {
+                window.location.reload();
+            } else {
+                notify.error(data.error || 'Failed to switch currency');
+            }
+        } catch (err) {
+            console.error('Currency switch error:', err);
+        }
+    };
 });

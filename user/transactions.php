@@ -26,6 +26,8 @@ if ($typeFilter === 'add_funds') {
     $sql .= " AND type = 'order'";
 } elseif ($typeFilter === 'refunds') {
     $sql .= " AND type = 'refund'";
+} elseif ($typeFilter === 'bonuses') {
+    $sql .= " AND type = 'bonus'";
 }
 
 $sql .= " ORDER BY created_at DESC";
@@ -107,6 +109,7 @@ require_once __DIR__ . '/../includes/header.php';
             <a href="/user/transactions.php?type=all" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $typeFilter === 'all' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">All Transactions</a>
             <a href="/user/transactions.php?type=add_funds" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $typeFilter === 'add_funds' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">Deposits (Add Funds)</a>
             <a href="/user/transactions.php?type=orders" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $typeFilter === 'orders' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">Order Charges</a>
+            <a href="/user/transactions.php?type=bonuses" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $typeFilter === 'bonuses' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">Referral Rewards</a>
             <a href="/user/transactions.php?type=refunds" class="px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap <?= $typeFilter === 'refunds' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100' ?>">Refunds</a>
         </div>
 
