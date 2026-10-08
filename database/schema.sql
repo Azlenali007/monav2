@@ -209,7 +209,7 @@ INSERT INTO `transactions` (`user_id`, `type`, `amount`, `gateway`, `gateway_txn
 (1024, 'deposit', 500.0000, 'Razorpay', 'pay_rzp_8941720', 'completed', 'Added funds via Razorpay UPI', '2025-05-12 16:12:00'),
 (1024, 'order', -35.0000, 'system', 'ord_10254', 'completed', 'Order #10254: Instagram Followers', '2025-05-12 16:32:00'),
 (1024, 'deposit', 200.0000, 'Razorpay', 'pay_rzp_6291054', 'completed', 'Added funds via Razorpay Cards', '2025-05-10 11:20:00'),
-(1024, 'order', -120.0000, 'system', 'ord_10253', 'completed', 'Order #10253: YouTube Views');
+(1024, 'order', -120.0000, 'system', 'ord_10253', 'completed', 'Order #10253: YouTube Views', '2025-05-10 18:15:00');
 
 -- Default Demo Support Tickets
 INSERT INTO `tickets` (`id`, `user_id`, `order_id`, `subject`, `status`, `priority`, `created_at`) VALUES
