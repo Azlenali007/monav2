@@ -84,13 +84,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $existingServiceIds = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
         $existingSet = array_flip(array_map('strval', $existingServiceIds));
 
-        // Fetch existing categories for intelligent matching
-        $catsStmt = $db->query("SELECT id, name, platform FROM categories WHERE status = 'active' ORDER BY sort_order ASC");
+        // Fetch existing categories for intelligent matching and duplicate checks
+        $catsStmt = $db->query("SELECT id, name, platform, sort_order, status FROM categories WHERE status = 'active' ORDER BY sort_order ASC, id ASC");
         $allCategories = $catsStmt->fetchAll() ?: [];
 
         $existingCatsByName = [];
         foreach ($allCategories as $c) {
-            $existingCatsByName[strtolower(trim($c['name']))] = (int)$c['id'];
+            $existingCatsByName[strtolower(trim($c['name']))] = [
+                'id' => (int)$c['id'],
+                'name' => (string)$c['name'],
+                'platform' => (string)$c['platform']
+            ];
         }
 
         $providerCurrency = !empty($provider['currency']) ? strtoupper(trim($provider['currency'])) : 'USD';
@@ -125,19 +129,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $suspiciousRatesCount++;
             }
 
-            // Category Matching
-            if (isset($existingCatsByName[$lowerCat])) {
-                $normalized['matched_category_id'] = $existingCatsByName[$lowerCat];
+            // Category Matching & Presence Check
+            $alreadyExists = isset($existingCatsByName[$lowerCat]);
+            $localCatId = $alreadyExists ? (int)$existingCatsByName[$lowerCat]['id'] : null;
+
+            if ($alreadyExists) {
+                $normalized['matched_category_id'] = $localCatId;
             } else {
                 $matchedId = find_matching_category_id($rawCatName, 0);
                 $normalized['matched_category_id'] = $matchedId > 0 ? $matchedId : 'auto_create';
             }
 
+            // Derive platform from category name
+            $platform = 'other';
+            if (str_contains($lowerCat, 'instagram')) $platform = 'instagram';
+            elseif (str_contains($lowerCat, 'youtube')) $platform = 'youtube';
+            elseif (str_contains($lowerCat, 'telegram')) $platform = 'telegram';
+            elseif (str_contains($lowerCat, 'facebook')) $platform = 'facebook';
+            elseif (str_contains($lowerCat, 'tiktok')) $platform = 'tiktok';
+            elseif (str_contains($lowerCat, 'twitter') || str_contains($lowerCat, ' x ')) $platform = 'twitter';
+
             // Tally categories
             if (!isset($categoryCounts[$rawCatName])) {
                 $categoryCounts[$rawCatName] = [
                     'name' => $rawCatName,
+                    'platform' => $platform,
                     'count' => 0,
+                    'already_imported' => $alreadyExists,
+                    'local_category_id' => $localCatId,
                     'matched_category_id' => $normalized['matched_category_id']
                 ];
             }
@@ -155,6 +174,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'conversion_rate_to_base' => $conversionRateToBase,
             'services' => $normalizedList,
             'categories' => array_values($categoryCounts),
+            'existing_categories' => array_map(fn($c) => [
+                'id' => (int)$c['id'],
+                'name' => (string)$c['name'],
+                'platform' => (string)$c['platform']
+            ], $allCategories),
             'total_count' => count($normalizedList),
             'already_imported_count' => count(array_filter($normalizedList, fn($s) => $s['already_imported'])),
             'suspicious_count' => $suspiciousRatesCount
@@ -163,7 +187,135 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // =========================================================================
-    // ACTION 2: Execute Import (Categories & Services with Foreign Key Integrity)
+    // ACTION 2: Import Selected Categories Separately
+    // =========================================================================
+    if ($action === 'import_categories') {
+        header('Content-Type: application/json; charset=UTF-8');
+        $providerId = (int)($_POST['provider_id'] ?? 0);
+        $rawCatsJson = $_POST['categories_data'] ?? '';
+
+        if ($providerId <= 0) {
+            echo json_encode(['success' => false, 'error' => 'Please select a valid provider.']);
+            exit;
+        }
+
+        $categoriesToImport = json_decode($rawCatsJson, true);
+        if (!is_array($categoriesToImport) || empty($categoriesToImport)) {
+            echo json_encode(['success' => false, 'error' => 'No categories were selected for import.']);
+            exit;
+        }
+
+        $createdCount = 0;
+        $skippedDuplicates = 0;
+        $failedCount = 0;
+        $errorDetails = [];
+
+        $db->beginTransaction();
+        try {
+            // Load existing categories to accurately prevent duplicates
+            $stmt = $db->query("SELECT id, name, platform, sort_order FROM categories");
+            $existingByName = [];
+            $maxSort = 0;
+            while ($row = $stmt->fetch()) {
+                $existingByName[strtolower(trim((string)$row['name']))] = (int)$row['id'];
+                if ((int)$row['sort_order'] > $maxSort) {
+                    $maxSort = (int)$row['sort_order'];
+                }
+            }
+
+            $insStmt = $db->prepare("
+                INSERT INTO categories (name, platform, sort_order, status)
+                VALUES (:name, :platform, :sort, 'active')
+            ");
+
+            $allowedPlatforms = ['instagram', 'youtube', 'telegram', 'facebook', 'tiktok', 'twitter', 'other'];
+
+            foreach ($categoriesToImport as $catItem) {
+                $name = trim((string)($catItem['name'] ?? ''));
+                if ($name === '') {
+                    $failedCount++;
+                    $errorDetails[] = "Category name cannot be empty.";
+                    continue;
+                }
+
+                $lower = strtolower($name);
+
+                // Prevent duplicate categories when importing the same categories multiple times
+                if (isset($existingByName[$lower])) {
+                    $skippedDuplicates++;
+                    continue;
+                }
+
+                // Platform determination
+                $platform = strtolower(trim((string)($catItem['platform'] ?? 'other')));
+                if (!in_array($platform, $allowedPlatforms, true)) {
+                    if (str_contains($lower, 'instagram')) $platform = 'instagram';
+                    elseif (str_contains($lower, 'youtube')) $platform = 'youtube';
+                    elseif (str_contains($lower, 'telegram')) $platform = 'telegram';
+                    elseif (str_contains($lower, 'facebook')) $platform = 'facebook';
+                    elseif (str_contains($lower, 'tiktok')) $platform = 'tiktok';
+                    elseif (str_contains($lower, 'twitter') || str_contains($lower, ' x ')) $platform = 'twitter';
+                    else $platform = 'other';
+                }
+
+                $maxSort++;
+                $insStmt->execute([
+                    'name' => $name,
+                    'platform' => $platform,
+                    'sort' => $maxSort
+                ]);
+                $newId = (int)$db->lastInsertId();
+                $existingByName[$lower] = $newId;
+                $createdCount++;
+            }
+
+            $db->commit();
+
+            // Refetch active categories to return to client
+            $refreshedStmt = $db->query("SELECT id, name, platform FROM categories WHERE status = 'active' ORDER BY sort_order ASC, id ASC");
+            $updatedCategories = array_map(function($c) {
+                return [
+                    'id' => (int)$c['id'],
+                    'name' => (string)$c['name'],
+                    'platform' => (string)$c['platform']
+                ];
+            }, $refreshedStmt->fetchAll() ?: []);
+
+            $msg = sprintf(
+                "Categories import complete: %d created, %d skipped (already exist in database).",
+                $createdCount,
+                $skippedDuplicates
+            );
+
+            echo json_encode([
+                'success' => true,
+                'message' => $msg,
+                'categories_created' => (int)$createdCount,
+                'skipped_duplicates' => (int)$skippedDuplicates,
+                'skipped' => (int)$skippedDuplicates,
+                'failed' => (int)$failedCount,
+                'errors' => $errorDetails,
+                'updated_categories' => $updatedCategories
+            ]);
+            exit;
+
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            echo json_encode([
+                'success' => false,
+                'error' => 'Database transaction failed: ' . $e->getMessage(),
+                'categories_created' => 0,
+                'skipped_duplicates' => 0,
+                'skipped' => 0,
+                'failed' => count($categoriesToImport),
+                'errors' => [$e->getMessage()]
+            ]);
+            exit;
+        }
+    }
+
+    // =========================================================================
+    // ACTION 3: Execute Import (Categories & Services with Foreign Key Integrity)
     // =========================================================================
     if ($action === 'import_services') {
         header('Content-Type: application/json; charset=UTF-8');
@@ -172,6 +324,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $markupPercent = (float)($_POST['markup_percent'] ?? 0.0);
         $markupFixed = (float)($_POST['markup_fixed'] ?? 0.0);
         $defaultCategoryId = (int)($_POST['default_category_id'] ?? 1);
+        $autoCreateMissing = isset($_POST['auto_create_missing']) && $_POST['auto_create_missing'] === '1';
         $rawServicesJson = $_POST['services_data'] ?? '';
 
         if ($providerId <= 0) {
@@ -232,7 +385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (:name, :platform, :sort, 'active')
             ");
 
-            if ($importMode === 'both' || $importMode === 'categories_only') {
+            if ($importMode === 'both' || $importMode === 'categories_only' || $autoCreateMissing) {
                 foreach ($servicesToImport as $svc) {
                     $rawCatName = trim((string)($svc['category_name'] ?? 'Other'));
                     if ($rawCatName === '') $rawCatName = 'Other';
@@ -259,28 +412,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         continue;
                     }
 
-                    // Auto-create category safely
-                    $pName = strtolower($rawCatName);
-                    $platform = 'other';
-                    if (str_contains($pName, 'instagram')) $platform = 'instagram';
-                    elseif (str_contains($pName, 'youtube')) $platform = 'youtube';
-                    elseif (str_contains($pName, 'telegram')) $platform = 'telegram';
-                    elseif (str_contains($pName, 'facebook')) $platform = 'facebook';
-                    elseif (str_contains($pName, 'tiktok')) $platform = 'tiktok';
-                    elseif (str_contains($pName, 'twitter') || str_contains($pName, ' x ')) $platform = 'twitter';
+                    // Only auto-create if explicitly enabled or target_category_id is auto_create
+                    if ($targetCatId === 'auto_create' || $autoCreateMissing || $importMode === 'both') {
+                        $pName = strtolower($rawCatName);
+                        $platform = 'other';
+                        if (str_contains($pName, 'instagram')) $platform = 'instagram';
+                        elseif (str_contains($pName, 'youtube')) $platform = 'youtube';
+                        elseif (str_contains($pName, 'telegram')) $platform = 'telegram';
+                        elseif (str_contains($pName, 'facebook')) $platform = 'facebook';
+                        elseif (str_contains($pName, 'tiktok')) $platform = 'tiktok';
+                        elseif (str_contains($pName, 'twitter') || str_contains($pName, ' x ')) $platform = 'twitter';
 
-                    $nextSort = count($existingCategoriesById) + 1;
-                    $catInsertStmt->execute([
-                        'name' => $rawCatName,
-                        'platform' => $platform,
-                        'sort' => $nextSort
-                    ]);
-                    $newCatId = (int)$db->lastInsertId();
+                        $nextSort = count($existingCategoriesById) + 1;
+                        $catInsertStmt->execute([
+                            'name' => $rawCatName,
+                            'platform' => $platform,
+                            'sort' => $nextSort
+                        ]);
+                        $newCatId = (int)$db->lastInsertId();
 
-                    $existingCategoriesById[$newCatId] = ['id' => $newCatId, 'name' => $rawCatName, 'platform' => $platform];
-                    $existingCategoriesByName[$lowerCatName] = $newCatId;
-                    $categoryResolutionMap[$lowerCatName] = $newCatId;
-                    $categoriesCreated++;
+                        $existingCategoriesById[$newCatId] = ['id' => $newCatId, 'name' => $rawCatName, 'platform' => $platform];
+                        $existingCategoriesByName[$lowerCatName] = $newCatId;
+                        $categoryResolutionMap[$lowerCatName] = $newCatId;
+                        $categoriesCreated++;
+                    }
                 }
             }
 
@@ -341,7 +496,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // STRICT FK SAFETY CHECK: Ensure category exists in categories table before insert
                     if (!$resolvedCatId || !isset($existingCategoriesById[$resolvedCatId])) {
                         $failedCount++;
-                        $errorDetails[] = "Service #{$psid} ({$name}): Category could not be resolved or does not exist.";
+                        $errorDetails[] = "Service #{$psid} ({$name}): Category '{$rawCatName}' has not been imported yet. Please import it first in the Categories tab or choose 'Auto-Create Category'.";
                         continue;
                     }
 
@@ -382,6 +537,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $db->commit();
 
+            // Refetch active categories if any were created
+            $refreshedCats = array_map(fn($c) => [
+                'id' => (int)$c['id'],
+                'name' => (string)$c['name'],
+                'platform' => (string)$c['platform']
+            ], $db->query("SELECT id, name, platform FROM categories WHERE status = 'active' ORDER BY sort_order ASC, id ASC")->fetchAll() ?: []);
+
             // Return standardized numeric JSON response contract
             $msg = ($importMode === 'categories_only')
                 ? "Categories import complete: {$categoriesCreated} created, {$categoriesMatched} matched."
@@ -396,6 +558,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'failed' => (int)$failedCount,
                 'categories_created' => (int)$categoriesCreated,
                 'categories_reused' => (int)$categoriesMatched,
+                'updated_categories' => $refreshedCats,
                 'errors' => $errorDetails
             ]);
             exit;
@@ -590,192 +753,415 @@ require_once __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
 
-    <!-- Step 2: Live Fetched Services & Bulk Selection -->
-    <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xl space-y-6" x-show="services.length > 0" style="display: none;">
+    <!-- Step 2: Live Fetched Categories & Services Manager -->
+    <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xl space-y-6" x-show="services.length > 0 || providerCategories.length > 0" style="display: none;">
+        <!-- Header & Tab Navigation Bar -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
             <div>
                 <div class="flex items-center gap-3">
                     <span class="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-black text-sm">2</span>
                     <div>
-                        <h2 class="text-base font-extrabold text-slate-900">Review &amp; Select Services to Import</h2>
+                        <h2 class="text-base font-extrabold text-slate-900">Review &amp; Import from Provider</h2>
                         <p class="text-xs text-slate-500">
-                            Loaded <strong class="text-slate-900 font-mono-nums" x-text="services.length"></strong> real services across <strong class="text-purple-700 font-mono-nums" x-text="providerCategories.length"></strong> categories from <strong class="text-blue-700" x-text="providerName"></strong>
+                            Loaded <strong class="text-purple-700 font-mono-nums" x-text="providerCategories.length"></strong> categories and <strong class="text-slate-900 font-mono-nums" x-text="services.length"></strong> services from <strong class="text-blue-700" x-text="providerName"></strong>
                         </p>
                     </div>
                 </div>
             </div>
 
-            <!-- Action: Bulk Import Button -->
-            <div class="flex items-center gap-3">
-                <span class="text-xs font-bold text-slate-600">
-                    <span class="text-blue-600 font-extrabold text-sm font-mono-nums" x-text="selectedIds.length"></span> selected
-                </span>
+            <!-- Tab Switcher -->
+            <div class="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl">
                 <button type="button" 
-                        @click="importSelected()" 
-                        :disabled="selectedIds.length === 0 || importing"
-                        class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-extrabold shadow-md shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer">
-                    <template x-if="importing">
-                        <svg class="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                        </svg>
+                        @click="activeTab = 'categories'" 
+                        :class="activeTab === 'categories' ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20' : 'text-slate-600 hover:text-slate-900'"
+                        class="px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer">
+                    <span>📁 Categories</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          :class="activeTab === 'categories' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'"
+                          x-text="providerCategories.length"></span>
+                    <template x-if="selectedCategoryNames.length > 0">
+                        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-900" x-text="selectedCategoryNames.length"></span>
                     </template>
-                    <span x-text="importing ? 'Importing into Database...' : '📥 Import Selected (' + selectedIds.length + ')'"></span>
+                </button>
+                <button type="button" 
+                        @click="activeTab = 'services'" 
+                        :class="activeTab === 'services' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'text-slate-600 hover:text-slate-900'"
+                        class="px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer">
+                    <span>⚡ Services</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          :class="activeTab === 'services' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'"
+                          x-text="services.length"></span>
+                    <template x-if="selectedIds.length > 0">
+                        <span class="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-900" x-text="selectedIds.length"></span>
+                    </template>
                 </button>
             </div>
         </div>
 
-        <!-- CATEGORY PREVIEW & MAPPING BAR -->
-        <div class="bg-gradient-to-r from-purple-50/60 to-indigo-50/60 p-4 sm:p-5 rounded-2xl border border-purple-100 space-y-3">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <!-- ================================================================= -->
+        <!-- TAB 1: CATEGORIES SECTION (SELECT & IMPORT CATEGORIES SEPARATELY)  -->
+        <!-- ================================================================= -->
+        <div x-show="activeTab === 'categories'" class="space-y-5">
+            <!-- Categories Header & Actions -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-purple-50/60 border border-purple-100">
+                <div>
+                    <h3 class="text-sm font-extrabold text-purple-950 flex items-center gap-2">
+                        <span>📁</span>
+                        <span>Select Provider Categories to Import</span>
+                    </h3>
+                    <p class="text-xs text-purple-800/80 mt-0.5">
+                        Select individual or all provider categories to import into your local MySQL database. Duplicate entries will be automatically skipped.
+                    </p>
+                </div>
+                <!-- Controls & Import Button -->
+                <div class="flex items-center gap-3 shrink-0">
+                    <span class="text-xs font-bold text-purple-950">
+                        <strong class="text-purple-700 font-extrabold text-sm font-mono-nums" x-text="selectedCategoryNames.length"></strong> of <span class="font-mono-nums" x-text="providerCategories.length"></span> selected
+                    </span>
+                    <button type="button" 
+                            @click="importSelectedCategories()" 
+                            :disabled="selectedCategoryNames.length === 0 || importingCategories"
+                            class="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-extrabold shadow-md shadow-purple-500/20 transition-all flex items-center gap-2 cursor-pointer">
+                        <template x-if="importingCategories">
+                            <svg class="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                        </template>
+                        <span x-text="importingCategories ? 'Importing Categories...' : '📥 Import Selected Categories (' + selectedCategoryNames.length + ')'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Categories Filter Controls -->
+            <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/70">
+                <!-- Search -->
+                <div class="w-full sm:w-64">
+                    <input type="text" x-model="categorySearchQuery" placeholder="Search provider category..." class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600">
+                </div>
+
+                <!-- Platform Filter -->
                 <div class="flex items-center gap-2">
-                    <span class="text-base">📁</span>
-                    <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Category Mapping Preview</h3>
-                    <span class="text-[11px] font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full" x-text="providerCategories.length + ' Categories'"></span>
+                    <label class="text-xs font-bold text-slate-600">Platform:</label>
+                    <select x-model="categoryPlatformFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold">
+                        <option value="all">All Platforms</option>
+                        <option value="instagram">Instagram</option>
+                        <option value="youtube">YouTube</option>
+                        <option value="telegram">Telegram</option>
+                        <option value="facebook">Facebook</option>
+                        <option value="tiktok">TikTok</option>
+                        <option value="twitter">Twitter / X</option>
+                        <option value="other">Other</option>
+                    </select>
                 </div>
-                <div class="text-[11px] text-slate-500">
-                    Map provider categories to existing local categories or set to auto-create.
+
+                <!-- Status Filter -->
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-bold text-slate-600">Status:</label>
+                    <select x-model="categoryStatusFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold">
+                        <option value="all">All Categories</option>
+                        <option value="new">Only New Categories</option>
+                        <option value="in_db">Already in Database</option>
+                    </select>
+                </div>
+
+                <!-- Quick Select Buttons -->
+                <div class="flex items-center gap-2">
+                    <button type="button" @click="selectOnlyNewCategories()" class="px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-xl text-xs font-bold text-purple-700 hover:bg-purple-100 cursor-pointer">
+                        Select All New
+                    </button>
+                    <button type="button" @click="selectAllFilteredCategories()" class="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer">
+                        Select All Filtered
+                    </button>
+                    <button type="button" @click="deselectAllCategories()" class="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer">
+                        Deselect All
+                    </button>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto p-1">
-                <template x-for="cat in providerCategories" :key="cat.name">
-                    <div class="p-2.5 bg-white rounded-xl border border-purple-100 shadow-2xs space-y-1.5">
-                        <div class="flex items-center justify-between text-xs">
-                            <span class="font-bold text-slate-800 truncate" :title="cat.name" x-text="cat.name"></span>
-                            <span class="text-[10px] font-bold text-slate-400 font-mono-nums shrink-0" x-text="cat.count + ' svcs'"></span>
-                        </div>
-                        <select :value="cat.matched_category_id" 
-                                @change="onCategoryMappingChange(cat.name, $event.target.value)"
-                                class="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:ring-1 focus:ring-purple-500">
-                            <option value="auto_create">✨ Auto-Create New Category</option>
-                            <?php foreach ($categories as $c): ?>
-                                <option value="<?= (int)$c['id'] ?>"><?= e($c['name']) ?> (<?= ucfirst($c['platform']) ?>)</option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </template>
-            </div>
-        </div>
-
-        <!-- Filter Controls -->
-        <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/70">
-            <!-- Search -->
-            <div class="w-full sm:w-64">
-                <input type="text" x-model="searchQuery" placeholder="Search service name or ID..." class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600">
-            </div>
-
-            <!-- Category Filter -->
-            <div class="flex items-center gap-2">
-                <label class="text-xs font-bold text-slate-600">Category:</label>
-                <select x-model="categoryFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold max-w-[200px] truncate">
-                    <option value="all">All Categories</option>
-                    <template x-for="cat in uniqueCategories" :key="cat">
-                        <option :value="cat" x-text="cat"></option>
-                    </template>
-                </select>
-            </div>
-
-            <!-- Import Status Filter -->
-            <div class="flex items-center gap-2">
-                <label class="text-xs font-bold text-slate-600">Status:</label>
-                <select x-model="statusFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold">
-                    <option value="all">All Services</option>
-                    <option value="new">Only New Services</option>
-                    <option value="imported">Already Imported</option>
-                </select>
-            </div>
-
-            <!-- Quick Select Buttons -->
-            <div class="flex items-center gap-2">
-                <button type="button" @click="selectOnlyNew()" class="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-100 cursor-pointer">
-                    Select All New
-                </button>
-                <button type="button" @click="selectAllFiltered()" class="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer">
-                    Select All Filtered
-                </button>
-                <button type="button" @click="deselectAll()" class="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer">
-                    Deselect All
-                </button>
-            </div>
-        </div>
-
-        <!-- Services Preview Table -->
-        <div class="overflow-x-auto border border-slate-200 rounded-2xl max-h-[600px] overflow-y-auto">
-            <table class="w-full text-left text-xs">
-                <thead class="sticky top-0 bg-slate-100 z-10">
-                    <tr class="border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
-                        <th class="py-3 px-3 w-10 text-center">
-                            <input type="checkbox" @change="toggleSelectAll($event.target.checked)" :checked="isAllFilteredSelected" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
-                        </th>
-                        <th class="py-3 px-3">ID</th>
-                        <th class="py-3 px-3 min-w-[240px]">Service Name</th>
-                        <th class="py-3 px-3">Provider Category</th>
-                        <th class="py-3 px-3">Orig Rate</th>
-                        <th class="py-3 px-3">Panel Selling Rate (<span x-text="baseCurrency"></span>)</th>
-                        <th class="py-3 px-3 min-w-[160px]">Target Category</th>
-                        <th class="py-3 px-3">Min / Max</th>
-                        <th class="py-3 px-3 text-right">Status</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 text-slate-700">
-                    <template x-for="item in paginatedServices" :key="item.provider_service_id">
-                        <tr class="hover:bg-slate-50 transition-colors" :class="item.already_imported ? 'bg-slate-50/50' : (selectedIds.includes(item.provider_service_id) ? 'bg-blue-50/40' : '')">
-                            <td class="py-3 px-3 text-center">
-                                <input type="checkbox" 
-                                       :value="item.provider_service_id" 
-                                       :checked="selectedIds.includes(item.provider_service_id)"
-                                       @change="toggleSelectService(item.provider_service_id)"
-                                       class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
-                            </td>
-                            <td class="py-3 px-3 font-mono text-slate-400 font-bold" x-text="'#' + item.provider_service_id"></td>
-                            <td class="py-3 px-3 font-bold text-slate-900" x-text="item.name"></td>
-                            <td class="py-3 px-3 text-slate-500" x-text="item.category_name"></td>
-                            <td class="py-3 px-3 font-mono tabular-nums text-slate-500">
-                                <span x-text="providerCurrency + ' ' + Number(item.original_rate).toFixed(4)"></span>
-                                <template x-if="item.is_suspicious_rate">
-                                    <span class="block text-[10px] font-bold text-rose-600 font-sans">⚠️ Implausible Rate</span>
-                                </template>
-                            </td>
-                            <td class="py-3 px-3 font-extrabold text-blue-600 tabular-nums font-mono" x-text="baseCurrencySymbol + ' ' + calculateRate(item.original_rate)"></td>
-                            <td class="py-3 px-3">
-                                <select x-model="item.matched_category_id" class="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs w-full max-w-[200px] truncate">
-                                    <option value="auto_create">✨ Auto-Create New Category</option>
-                                    <?php foreach ($categories as $cat): ?>
-                                        <option value="<?= (int)$cat['id'] ?>"><?= e($cat['name']) ?> (<?= ucfirst($cat['platform']) ?>)</option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </td>
-                            <td class="py-3 px-3 text-slate-500 tabular-nums font-mono-nums" x-text="Number(item.min_quantity).toLocaleString() + ' - ' + Number(item.max_quantity).toLocaleString()"></td>
-                            <td class="py-3 px-3 text-right">
-                                <template x-if="item.already_imported">
-                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200">
-                                        Already Imported
-                                    </span>
-                                </template>
-                                <template x-if="!item.already_imported">
-                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                        New Service
-                                    </span>
-                                </template>
-                            </td>
+            <!-- Categories Table -->
+            <div class="overflow-x-auto border border-slate-200 rounded-2xl max-h-[600px] overflow-y-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="sticky top-0 bg-slate-100 z-10">
+                        <tr class="border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
+                            <th class="py-3 px-3 w-10 text-center">
+                                <input type="checkbox" @change="toggleSelectAllCategories($event.target.checked)" :checked="isAllFilteredCategoriesSelected" class="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer">
+                            </th>
+                            <th class="py-3 px-3 min-w-[200px]">Provider Category Name</th>
+                            <th class="py-3 px-3 min-w-[140px]">Platform Assignment</th>
+                            <th class="py-3 px-3 text-center">Services in Provider</th>
+                            <th class="py-3 px-3 min-w-[160px]">Database Status</th>
+                            <th class="py-3 px-3 text-right">Action</th>
                         </tr>
-                    </template>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-slate-700">
+                        <template x-if="paginatedCategories.length === 0">
+                            <tr>
+                                <td colspan="6" class="py-8 text-center text-slate-400">
+                                    No categories match your search or filter.
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-for="cat in paginatedCategories" :key="cat.name">
+                            <tr class="hover:bg-purple-50/20 transition-colors" :class="selectedCategoryNames.includes(cat.name) ? 'bg-purple-50/40' : ''">
+                                <td class="py-3 px-3 text-center">
+                                    <input type="checkbox" 
+                                           :value="cat.name" 
+                                           :checked="selectedCategoryNames.includes(cat.name)"
+                                           @change="toggleSelectCategory(cat.name)"
+                                           class="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer">
+                                </td>
+                                <td class="py-3 px-3 font-bold text-slate-900" x-text="cat.name"></td>
+                                <td class="py-3 px-3">
+                                    <select x-model="cat.platform" class="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold capitalize text-slate-700">
+                                        <option value="instagram">Instagram</option>
+                                        <option value="youtube">YouTube</option>
+                                        <option value="telegram">Telegram</option>
+                                        <option value="facebook">Facebook</option>
+                                        <option value="tiktok">TikTok</option>
+                                        <option value="twitter">Twitter / X</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </td>
+                                <td class="py-3 px-3 text-center font-mono-nums font-bold text-slate-600" x-text="cat.count + ' svcs'"></td>
+                                <td class="py-3 px-3">
+                                    <template x-if="cat.already_imported">
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                            <span>✓</span>
+                                            <span x-text="'In Database' + (cat.local_category_id ? ' (#' + cat.local_category_id + ')' : '')"></span>
+                                        </span>
+                                    </template>
+                                    <template x-if="!cat.already_imported">
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-200">
+                                            <span>✨</span>
+                                            <span>New Category</span>
+                                        </span>
+                                    </template>
+                                </td>
+                                <td class="py-3 px-3 text-right">
+                                    <template x-if="!cat.already_imported">
+                                        <button type="button" 
+                                                @click="importSingleCategory(cat.name, cat.platform)"
+                                                :disabled="importingCategories"
+                                                class="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer">
+                                            Import
+                                        </button>
+                                    </template>
+                                    <template x-if="cat.already_imported">
+                                        <span class="text-[11px] font-semibold text-slate-400">Ready</span>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Categories Pagination -->
+            <div class="flex items-center justify-between text-xs text-slate-500 pt-2">
+                <div>
+                    Showing <span class="font-bold text-slate-800 font-mono-nums" x-text="filteredCategories.length > 0 ? (((categoryCurrentPage - 1) * categoryPerPage) + 1) : 0"></span> - 
+                    <span class="font-bold text-slate-800 font-mono-nums" x-text="Math.min(categoryCurrentPage * categoryPerPage, filteredCategories.length)"></span> 
+                    of <span class="font-bold text-slate-800 font-mono-nums" x-text="filteredCategories.length"></span> filtered categories
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" @click="categoryCurrentPage = Math.max(1, categoryCurrentPage - 1)" :disabled="categoryCurrentPage === 1" class="px-3 py-1.5 rounded-xl border border-slate-200 bg-white disabled:opacity-40 cursor-pointer">Previous</button>
+                    <span class="font-bold text-slate-800 font-mono-nums" x-text="'Page ' + categoryCurrentPage + ' of ' + categoryTotalPages"></span>
+                    <button type="button" @click="categoryCurrentPage = Math.min(categoryTotalPages, categoryCurrentPage + 1)" :disabled="categoryCurrentPage >= categoryTotalPages" class="px-3 py-1.5 rounded-xl border border-slate-200 bg-white disabled:opacity-40 cursor-pointer">Next</button>
+                </div>
+            </div>
         </div>
 
-        <!-- Pagination Bar -->
-        <div class="flex items-center justify-between text-xs text-slate-500 pt-2">
-            <div>
-                Showing <span class="font-bold text-slate-800 font-mono-nums" x-text="filteredServices.length > 0 ? (((currentPage - 1) * perPage) + 1) : 0"></span> - 
-                <span class="font-bold text-slate-800 font-mono-nums" x-text="Math.min(currentPage * perPage, filteredServices.length)"></span> 
-                of <span class="font-bold text-slate-800 font-mono-nums" x-text="filteredServices.length"></span> filtered services
+        <!-- ================================================================= -->
+        <!-- TAB 2: SERVICES SECTION (PRESERVED WORKFLOW & ADVANCED MAPPING)    -->
+        <!-- ================================================================= -->
+        <div x-show="activeTab === 'services'" class="space-y-6">
+            <!-- Services Actions Bar -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-blue-50/60 border border-blue-100">
+                <div>
+                    <h3 class="text-sm font-extrabold text-blue-950 flex items-center gap-2">
+                        <span>⚡</span>
+                        <span>Select Services to Import</span>
+                    </h3>
+                    <p class="text-xs text-blue-800/80 mt-0.5">
+                        Selected services will be mapped to local categories and inserted with configured profit markup.
+                    </p>
+                </div>
+                <div class="flex items-center gap-4 shrink-0">
+                    <label class="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer" title="Automatically creates missing categories in the database if not imported yet">
+                        <input type="checkbox" x-model="autoCreateMissing" class="w-4 h-4 rounded text-blue-600 border-slate-300">
+                        <span>Auto-create missing categories safely</span>
+                    </label>
+                    <span class="text-xs font-bold text-slate-600">
+                        <span class="text-blue-600 font-extrabold text-sm font-mono-nums" x-text="selectedIds.length"></span> selected
+                    </span>
+                    <button type="button" 
+                            @click="importSelected()" 
+                            :disabled="selectedIds.length === 0 || importing"
+                            class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-extrabold shadow-md shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer">
+                        <template x-if="importing">
+                            <svg class="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                        </template>
+                        <span x-text="importing ? 'Importing into Database...' : '📥 Import Selected Services (' + selectedIds.length + ')'"></span>
+                    </button>
+                </div>
             </div>
-            <div class="flex items-center gap-2">
-                <button type="button" @click="currentPage = Math.max(1, currentPage - 1)" :disabled="currentPage === 1" class="px-3 py-1.5 rounded-xl border border-slate-200 bg-white disabled:opacity-40 cursor-pointer">Previous</button>
-                <span class="font-bold text-slate-800 font-mono-nums" x-text="'Page ' + currentPage + ' of ' + totalPages"></span>
-                <button type="button" @click="currentPage = Math.min(totalPages, currentPage + 1)" :disabled="currentPage >= totalPages" class="px-3 py-1.5 rounded-xl border border-slate-200 bg-white disabled:opacity-40 cursor-pointer">Next</button>
+
+            <!-- CATEGORY PREVIEW & MAPPING BAR -->
+            <div class="bg-gradient-to-r from-purple-50/60 to-indigo-50/60 p-4 sm:p-5 rounded-2xl border border-purple-100 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-base">📁</span>
+                        <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Quick Category Mapping</h3>
+                        <span class="text-[11px] font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full" x-text="providerCategories.length + ' Categories'"></span>
+                    </div>
+                    <div class="text-[11px] text-slate-500">
+                        Map provider categories to local categories, or use the <strong>Categories</strong> tab to import them directly first.
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto p-1">
+                    <template x-for="cat in providerCategories" :key="cat.name">
+                        <div class="p-2.5 bg-white rounded-xl border border-purple-100 shadow-2xs space-y-1.5">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="font-bold text-slate-800 truncate" :title="cat.name" x-text="cat.name"></span>
+                                <span class="text-[10px] font-bold text-slate-400 font-mono-nums shrink-0" x-text="cat.count + ' svcs'"></span>
+                            </div>
+                            <select :value="cat.matched_category_id" 
+                                    @change="onCategoryMappingChange(cat.name, $event.target.value)"
+                                    class="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:ring-1 focus:ring-purple-500">
+                                <option value="auto_create">✨ Auto-Create New Category</option>
+                                <template x-for="c in categories" :key="c.id">
+                                    <option :value="c.id" x-text="c.name + ' (' + c.platform + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Filter Controls -->
+            <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/70">
+                <!-- Search -->
+                <div class="w-full sm:w-64">
+                    <input type="text" x-model="searchQuery" placeholder="Search service name or ID..." class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600">
+                </div>
+
+                <!-- Category Filter -->
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-bold text-slate-600">Category:</label>
+                    <select x-model="categoryFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold max-w-[200px] truncate">
+                        <option value="all">All Categories</option>
+                        <template x-for="cat in uniqueCategories" :key="cat">
+                            <option :value="cat" x-text="cat"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <!-- Import Status Filter -->
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-bold text-slate-600">Status:</label>
+                    <select x-model="statusFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold">
+                        <option value="all">All Services</option>
+                        <option value="new">Only New Services</option>
+                        <option value="imported">Already Imported</option>
+                    </select>
+                </div>
+
+                <!-- Quick Select Buttons -->
+                <div class="flex items-center gap-2">
+                    <button type="button" @click="selectOnlyNew()" class="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-100 cursor-pointer">
+                        Select All New
+                    </button>
+                    <button type="button" @click="selectAllFiltered()" class="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer">
+                        Select All Filtered
+                    </button>
+                    <button type="button" @click="deselectAll()" class="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer">
+                        Deselect All
+                    </button>
+                </div>
+            </div>
+
+            <!-- Services Preview Table -->
+            <div class="overflow-x-auto border border-slate-200 rounded-2xl max-h-[600px] overflow-y-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="sticky top-0 bg-slate-100 z-10">
+                        <tr class="border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
+                            <th class="py-3 px-3 w-10 text-center">
+                                <input type="checkbox" @change="toggleSelectAll($event.target.checked)" :checked="isAllFilteredSelected" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                            </th>
+                            <th class="py-3 px-3">ID</th>
+                            <th class="py-3 px-3 min-w-[240px]">Service Name</th>
+                            <th class="py-3 px-3">Provider Category</th>
+                            <th class="py-3 px-3">Orig Rate</th>
+                            <th class="py-3 px-3">Panel Selling Rate (<span x-text="baseCurrency"></span>)</th>
+                            <th class="py-3 px-3 min-w-[160px]">Target Category</th>
+                            <th class="py-3 px-3">Min / Max</th>
+                            <th class="py-3 px-3 text-right">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-slate-700">
+                        <template x-for="item in paginatedServices" :key="item.provider_service_id">
+                            <tr class="hover:bg-slate-50 transition-colors" :class="item.already_imported ? 'bg-slate-50/50' : (selectedIds.includes(item.provider_service_id) ? 'bg-blue-50/40' : '')">
+                                <td class="py-3 px-3 text-center">
+                                    <input type="checkbox" 
+                                           :value="item.provider_service_id" 
+                                           :checked="selectedIds.includes(item.provider_service_id)"
+                                           @change="toggleSelectService(item.provider_service_id)"
+                                           class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                                </td>
+                                <td class="py-3 px-3 font-mono text-slate-400 font-bold" x-text="'#' + item.provider_service_id"></td>
+                                <td class="py-3 px-3 font-bold text-slate-900" x-text="item.name"></td>
+                                <td class="py-3 px-3 text-slate-500" x-text="item.category_name"></td>
+                                <td class="py-3 px-3 font-mono tabular-nums text-slate-500">
+                                    <span x-text="providerCurrency + ' ' + Number(item.original_rate).toFixed(4)"></span>
+                                    <template x-if="item.is_suspicious_rate">
+                                        <span class="block text-[10px] font-bold text-rose-600 font-sans">⚠️ Implausible Rate</span>
+                                    </template>
+                                </td>
+                                <td class="py-3 px-3 font-extrabold text-blue-600 tabular-nums font-mono" x-text="baseCurrencySymbol + ' ' + calculateRate(item.original_rate)"></td>
+                                <td class="py-3 px-3">
+                                    <select x-model="item.matched_category_id" class="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs w-full max-w-[200px] truncate">
+                                        <option value="auto_create">✨ Auto-Create New Category</option>
+                                        <template x-for="c in categories" :key="c.id">
+                                            <option :value="c.id" x-text="c.name + ' (' + c.platform + ')'"></option>
+                                        </template>
+                                    </select>
+                                </td>
+                                <td class="py-3 px-3 text-slate-500 tabular-nums font-mono-nums" x-text="Number(item.min_quantity).toLocaleString() + ' - ' + Number(item.max_quantity).toLocaleString()"></td>
+                                <td class="py-3 px-3 text-right">
+                                    <template x-if="item.already_imported">
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200">
+                                            Already Imported
+                                        </span>
+                                    </template>
+                                    <template x-if="!item.already_imported">
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                            New Service
+                                        </span>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div class="flex items-center justify-between text-xs text-slate-500 pt-2">
+                <div>
+                    Showing <span class="font-bold text-slate-800 font-mono-nums" x-text="filteredServices.length > 0 ? (((currentPage - 1) * perPage) + 1) : 0"></span> - 
+                    <span class="font-bold text-slate-800 font-mono-nums" x-text="Math.min(currentPage * perPage, filteredServices.length)"></span> 
+                    of <span class="font-bold text-slate-800 font-mono-nums" x-text="filteredServices.length"></span> filtered services
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" @click="currentPage = Math.max(1, currentPage - 1)" :disabled="currentPage === 1" class="px-3 py-1.5 rounded-xl border border-slate-200 bg-white disabled:opacity-40 cursor-pointer">Previous</button>
+                    <span class="font-bold text-slate-800 font-mono-nums" x-text="'Page ' + currentPage + ' of ' + totalPages"></span>
+                    <button type="button" @click="currentPage = Math.min(totalPages, currentPage + 1)" :disabled="currentPage >= totalPages" class="px-3 py-1.5 rounded-xl border border-slate-200 bg-white disabled:opacity-40 cursor-pointer">Next</button>
+                </div>
             </div>
         </div>
     </div>
@@ -783,10 +1169,16 @@ require_once __DIR__ . '/../includes/header.php';
 
 <script>
 const CSRF_TOKEN = '<?= e($csrfToken) ?>';
+const INITIAL_CATEGORIES = <?= json_encode(array_map(fn($c) => [
+    'id' => (int)$c['id'],
+    'name' => (string)$c['name'],
+    'platform' => (string)$c['platform']
+], $categories), JSON_UNESCAPED_UNICODE) ?>;
 
 function serviceImporter() {
     return {
         selectedProviderId: '<?= (int)$preselectedProviderId ?>',
+        activeTab: 'categories',
         providerName: '',
         providerCurrency: 'USD',
         baseCurrency: '<?= e(app_base_currency_code()) ?>',
@@ -795,22 +1187,218 @@ function serviceImporter() {
         markupPercent: 25,
         markupFixed: 0,
         defaultCategoryId: '<?= (int)($categories[0]['id'] ?? 1) ?>',
+        autoCreateMissing: true,
         importMode: 'both',
         loading: false,
         importing: false,
+        importingCategories: false,
+        categories: INITIAL_CATEGORIES,
         services: [],
         providerCategories: [],
         selectedIds: [],
+        selectedCategoryNames: [],
         searchQuery: '',
         categoryFilter: 'all',
         statusFilter: 'all',
         currentPage: 1,
         perPage: 50,
+        categorySearchQuery: '',
+        categoryPlatformFilter: 'all',
+        categoryStatusFilter: 'all',
+        categoryCurrentPage: 1,
+        categoryPerPage: 25,
 
         onProviderSelect() {
             this.services = [];
             this.providerCategories = [];
             this.selectedIds = [];
+            this.selectedCategoryNames = [];
+        },
+
+        // Category Selection & Filter Computeds
+        get filteredCategories() {
+            return this.providerCategories.filter(cat => {
+                if (this.categoryStatusFilter === 'new' && cat.already_imported) return false;
+                if (this.categoryStatusFilter === 'in_db' && !cat.already_imported) return false;
+                if (this.categoryPlatformFilter !== 'all' && cat.platform !== this.categoryPlatformFilter) return false;
+                if (this.categorySearchQuery.trim() !== '') {
+                    const q = this.categorySearchQuery.toLowerCase();
+                    if (!cat.name.toLowerCase().includes(q)) return false;
+                }
+                return true;
+            });
+        },
+
+        get categoryTotalPages() {
+            return Math.max(1, Math.ceil(this.filteredCategories.length / this.categoryPerPage));
+        },
+
+        get paginatedCategories() {
+            const start = (this.categoryCurrentPage - 1) * this.categoryPerPage;
+            return this.filteredCategories.slice(start, start + this.categoryPerPage);
+        },
+
+        get isAllFilteredCategoriesSelected() {
+            const list = this.filteredCategories;
+            if (list.length === 0) return false;
+            return list.every(c => this.selectedCategoryNames.includes(c.name));
+        },
+
+        toggleSelectCategory(catName) {
+            const idx = this.selectedCategoryNames.indexOf(catName);
+            if (idx > -1) {
+                this.selectedCategoryNames.splice(idx, 1);
+            } else {
+                this.selectedCategoryNames.push(catName);
+            }
+        },
+
+        toggleSelectAllCategories(checked) {
+            if (checked) {
+                this.selectAllFilteredCategories();
+            } else {
+                this.deselectAllCategories();
+            }
+        },
+
+        selectAllFilteredCategories() {
+            const namesToAdd = this.filteredCategories.map(c => c.name);
+            this.selectedCategoryNames = Array.from(new Set([...this.selectedCategoryNames, ...namesToAdd]));
+        },
+
+        selectOnlyNewCategories() {
+            const newNames = this.filteredCategories
+                .filter(c => !c.already_imported)
+                .map(c => c.name);
+            this.selectedCategoryNames = newNames;
+        },
+
+        deselectAllCategories() {
+            this.selectedCategoryNames = [];
+        },
+
+        async importSingleCategory(name, platform) {
+            this.selectedCategoryNames = [name];
+            await this.importSelectedCategories();
+        },
+
+        async importSelectedCategories() {
+            if (this.selectedCategoryNames.length === 0) {
+                Swal.fire({ icon: 'info', title: 'No Categories Selected', text: 'Please check one or more categories to import.' });
+                return;
+            }
+
+            const confirmed = await Swal.fire({
+                title: `Import ${this.selectedCategoryNames.length} Category(s)?`,
+                text: `Selected categories will be created or mapped in your local database. Categories that already exist will be safely reused without duplicates.`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#9333ea',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Yes, Import Categories',
+                cancelButtonText: 'Cancel'
+            });
+
+            if (!confirmed.isConfirmed) return;
+
+            this.importingCategories = true;
+
+            try {
+                const selectedNamesSet = new Set(this.selectedCategoryNames);
+                const payloadCats = this.providerCategories
+                    .filter(c => selectedNamesSet.has(c.name))
+                    .map(c => ({
+                        name: c.name,
+                        platform: c.platform || 'other'
+                    }));
+
+                const formData = new FormData();
+                formData.append('action', 'import_categories');
+                formData.append('provider_id', this.selectedProviderId);
+                formData.append('categories_data', JSON.stringify(payloadCats));
+                formData.append('csrf_token', CSRF_TOKEN);
+                formData.append('ajax', '1');
+
+                const res = await fetch('/admin/import-services.php', {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    const created = Number(data.categories_created ?? 0);
+                    const skipped = Number(data.skipped_duplicates ?? data.skipped ?? 0);
+                    const failed = Number(data.failed ?? 0);
+
+                    // Update local categories list
+                    if (Array.isArray(data.updated_categories)) {
+                        this.categories = data.updated_categories;
+                    }
+
+                    // Update providerCategories state and service matching
+                    selectedNamesSet.forEach(name => {
+                        const target = this.providerCategories.find(c => c.name === name);
+                        if (target) {
+                            target.already_imported = true;
+                            // Find matching in refreshed categories
+                            const found = this.categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+                            if (found) {
+                                target.local_category_id = found.id;
+                                target.matched_category_id = found.id;
+                            }
+                        }
+
+                        // Also update matched_category_id on services
+                        const foundCat = this.categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+                        if (foundCat) {
+                            this.services.forEach(s => {
+                                if (s.category_name && s.category_name.toLowerCase() === name.toLowerCase()) {
+                                    s.matched_category_id = foundCat.id;
+                                }
+                            });
+                        }
+                    });
+
+                    this.selectedCategoryNames = [];
+
+                    const errorHtml = (data.errors && data.errors.length > 0)
+                        ? `<div class="mt-2 text-left max-h-32 overflow-y-auto p-2 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-800 space-y-1">
+                               ${data.errors.slice(0, 10).map(e => `<div>• ${e}</div>`).join('')}
+                           </div>`
+                        : '';
+
+                    Swal.fire({
+                        icon: failed > 0 ? (created > 0 ? 'warning' : 'error') : 'success',
+                        title: failed > 0 ? (created > 0 ? 'Categories Import Completed with Warnings' : 'Categories Import Failed') : 'Categories Import Completed',
+                        html: `
+                            <div class="text-left text-xs space-y-2 p-3.5 bg-slate-50 rounded-xl border border-slate-200 mt-2">
+                                <div class="font-bold text-slate-800 pb-1 border-b border-slate-200">Categories Summary:</div>
+                                <div class="flex justify-between"><span>✓ <strong>Successfully Created:</strong></span> <span class="text-emerald-600 font-bold font-mono">${created}</span></div>
+                                <div class="flex justify-between"><span>• <strong>Skipped (Already in Database):</strong></span> <span class="text-amber-600 font-bold font-mono">${skipped}</span></div>
+                                <div class="flex justify-between"><span>✕ <strong>Failed:</strong></span> <span class="text-rose-600 font-bold font-mono">${failed}</span></div>
+                            </div>
+                            ${errorHtml}
+                        `,
+                        confirmButtonText: 'Done'
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Category Import Failed',
+                        text: data.error || 'Failed to complete category insertion.'
+                    });
+                }
+            } catch (err) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Category Import Error',
+                    text: 'An error occurred while importing categories: ' + err.message
+                });
+            } finally {
+                this.importingCategories = false;
+            }
         },
 
         onCategoryMappingChange(catName, targetCatId) {
@@ -916,7 +1504,9 @@ function serviceImporter() {
             this.services = [];
             this.providerCategories = [];
             this.selectedIds = [];
+            this.selectedCategoryNames = [];
             this.currentPage = 1;
+            this.categoryCurrentPage = 1;
 
             try {
                 const formData = new FormData();
@@ -941,6 +1531,9 @@ function serviceImporter() {
                     this.baseCurrency = data.base_currency || 'INR';
                     this.baseCurrencySymbol = data.base_currency_symbol || '₹';
                     this.conversionRateToBase = Number(data.conversion_rate_to_base) || 1.0;
+                    if (Array.isArray(data.existing_categories)) {
+                        this.categories = data.existing_categories;
+                    }
 
                     if (this.services.length === 0) {
                         Swal.fire({
@@ -1021,6 +1614,7 @@ function serviceImporter() {
                 formData.append('markup_percent', this.markupPercent);
                 formData.append('markup_fixed', this.markupFixed);
                 formData.append('default_category_id', this.defaultCategoryId);
+                formData.append('auto_create_missing', this.autoCreateMissing ? '1' : '0');
                 formData.append('services_data', JSON.stringify(payloadServices));
                 formData.append('csrf_token', CSRF_TOKEN);
                 formData.append('ajax', '1');
@@ -1046,6 +1640,10 @@ function serviceImporter() {
                     const failed = Number(data.failed ?? 0);
                     const catsCreated = Number(data.categories_created ?? 0);
                     const catsReused = Number(data.categories_reused ?? 0);
+
+                    if (Array.isArray(data.updated_categories)) {
+                        this.categories = data.updated_categories;
+                    }
 
                     const errorHtml = (data.errors && data.errors.length > 0)
                         ? `<div class="mt-2 text-left max-h-32 overflow-y-auto p-2 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-800 space-y-1">
