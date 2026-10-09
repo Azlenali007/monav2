@@ -369,74 +369,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db->beginTransaction();
         try {
             // 1. Load existing categories indexed by ID and by lowercase name
-            $allCatsStmt = $db->query("SELECT id, name, platform FROM categories");
+            $allCatsStmt = $db->query("SELECT id, name, platform, sort_order FROM categories");
             $existingCategoriesById = [];
             $existingCategoriesByName = [];
+            $maxSort = 0;
             while ($c = $allCatsStmt->fetch()) {
                 $cId = (int)$c['id'];
                 $existingCategoriesById[$cId] = $c;
                 $existingCategoriesByName[strtolower(trim($c['name']))] = $cId;
+                if (isset($c['sort_order']) && (int)$c['sort_order'] > $maxSort) {
+                    $maxSort = (int)$c['sort_order'];
+                }
+            }
+            if ($maxSort === 0) {
+                $maxSort = count($existingCategoriesById);
             }
 
-            // Step A: Category Resolution / Creation Map
+            // Step A: Category Resolution / Automatic Creation
+            // Collects all required provider categories, reuses existing ones, or creates missing ones
             $categoryResolutionMap = [];
             $catInsertStmt = $db->prepare("
                 INSERT INTO categories (name, platform, sort_order, status)
                 VALUES (:name, :platform, :sort, 'active')
             ");
 
-            if ($importMode === 'both' || $importMode === 'categories_only' || $autoCreateMissing) {
-                foreach ($servicesToImport as $svc) {
-                    $rawCatName = trim((string)($svc['category_name'] ?? 'Other'));
-                    if ($rawCatName === '') $rawCatName = 'Other';
-                    $lowerCatName = strtolower($rawCatName);
-
-                    // If already resolved in this batch
-                    if (isset($categoryResolutionMap[$lowerCatName])) {
-                        continue;
-                    }
-
-                    // Explicit target category provided by user selection
-                    $targetCatId = $svc['target_category_id'] ?? 'auto_create';
-                    if (is_numeric($targetCatId) && (int)$targetCatId > 0 && isset($existingCategoriesById[(int)$targetCatId])) {
-                        $categoryResolutionMap[$lowerCatName] = (int)$targetCatId;
-                        $categoriesMatched++;
-                        continue;
-                    }
-
-                    // Check if category name matches an existing category
-                    if (isset($existingCategoriesByName[$lowerCatName])) {
-                        $matchedId = $existingCategoriesByName[$lowerCatName];
-                        $categoryResolutionMap[$lowerCatName] = $matchedId;
-                        $categoriesMatched++;
-                        continue;
-                    }
-
-                    // Only auto-create if explicitly enabled or target_category_id is auto_create
-                    if ($targetCatId === 'auto_create' || $autoCreateMissing || $importMode === 'both') {
-                        $pName = strtolower($rawCatName);
-                        $platform = 'other';
-                        if (str_contains($pName, 'instagram')) $platform = 'instagram';
-                        elseif (str_contains($pName, 'youtube')) $platform = 'youtube';
-                        elseif (str_contains($pName, 'telegram')) $platform = 'telegram';
-                        elseif (str_contains($pName, 'facebook')) $platform = 'facebook';
-                        elseif (str_contains($pName, 'tiktok')) $platform = 'tiktok';
-                        elseif (str_contains($pName, 'twitter') || str_contains($pName, ' x ')) $platform = 'twitter';
-
-                        $nextSort = count($existingCategoriesById) + 1;
-                        $catInsertStmt->execute([
-                            'name' => $rawCatName,
-                            'platform' => $platform,
-                            'sort' => $nextSort
-                        ]);
-                        $newCatId = (int)$db->lastInsertId();
-
-                        $existingCategoriesById[$newCatId] = ['id' => $newCatId, 'name' => $rawCatName, 'platform' => $platform];
-                        $existingCategoriesByName[$lowerCatName] = $newCatId;
-                        $categoryResolutionMap[$lowerCatName] = $newCatId;
-                        $categoriesCreated++;
-                    }
+            foreach ($servicesToImport as $svc) {
+                $rawCatName = trim((string)($svc['category_name'] ?? ''));
+                if ($rawCatName === '') {
+                    // Empty category name will be reported as error in service loop
+                    continue;
                 }
+                $lowerCatName = strtolower($rawCatName);
+
+                // If already resolved in this batch, proceed
+                if (isset($categoryResolutionMap[$lowerCatName])) {
+                    continue;
+                }
+
+                // Check 1: Explicit target category provided by user selection if valid
+                $targetCatId = $svc['target_category_id'] ?? 'auto_create';
+                if (is_numeric($targetCatId) && (int)$targetCatId > 0 && isset($existingCategoriesById[(int)$targetCatId])) {
+                    $categoryResolutionMap[$lowerCatName] = (int)$targetCatId;
+                    $categoriesMatched++;
+                    continue;
+                }
+
+                // Check 2: Check if category name matches an existing category in database
+                if (isset($existingCategoriesByName[$lowerCatName])) {
+                    $matchedId = $existingCategoriesByName[$lowerCatName];
+                    $categoryResolutionMap[$lowerCatName] = $matchedId;
+                    $categoriesMatched++;
+                    continue;
+                }
+
+                // Check 3: Category does not exist -> Automatically create in MySQL database
+                $pName = $lowerCatName;
+                $platform = 'other';
+                if (str_contains($pName, 'instagram')) $platform = 'instagram';
+                elseif (str_contains($pName, 'youtube')) $platform = 'youtube';
+                elseif (str_contains($pName, 'telegram')) $platform = 'telegram';
+                elseif (str_contains($pName, 'facebook')) $platform = 'facebook';
+                elseif (str_contains($pName, 'tiktok')) $platform = 'tiktok';
+                elseif (str_contains($pName, 'twitter') || str_contains($pName, ' x ')) $platform = 'twitter';
+
+                $maxSort++;
+                $catInsertStmt->execute([
+                    'name' => $rawCatName,
+                    'platform' => $platform,
+                    'sort' => $maxSort
+                ]);
+                $newCatId = (int)$db->lastInsertId();
+
+                $existingCategoriesById[$newCatId] = [
+                    'id' => $newCatId,
+                    'name' => $rawCatName,
+                    'platform' => $platform,
+                    'sort_order' => $maxSort
+                ];
+                $existingCategoriesByName[$lowerCatName] = $newCatId;
+                $categoryResolutionMap[$lowerCatName] = $newCatId;
+                $categoriesCreated++;
             }
 
             // Step B: Service Import if mode is 'both' or 'services_only'
@@ -479,24 +491,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     // Resolve category ID with strict foreign key validation
                     $rawCatName = trim((string)($svc['category_name'] ?? ''));
-                    $lowerCatName = strtolower($rawCatName);
-                    $targetCatId = $svc['target_category_id'] ?? null;
-                    $resolvedCatId = null;
-
-                    if (is_numeric($targetCatId) && (int)$targetCatId > 0 && isset($existingCategoriesById[(int)$targetCatId])) {
-                        $resolvedCatId = (int)$targetCatId;
-                    } elseif (isset($categoryResolutionMap[$lowerCatName])) {
-                        $resolvedCatId = $categoryResolutionMap[$lowerCatName];
-                    } elseif (isset($existingCategoriesByName[$lowerCatName])) {
-                        $resolvedCatId = $existingCategoriesByName[$lowerCatName];
-                    } elseif (isset($existingCategoriesById[$defaultCategoryId])) {
-                        $resolvedCatId = $defaultCategoryId;
+                    if ($rawCatName === '') {
+                        $failedCount++;
+                        $errorDetails[] = "Service #{$psid} ({$name}): No usable category information provided. Skipped.";
+                        continue;
                     }
+
+                    $lowerCatName = strtolower($rawCatName);
+                    $resolvedCatId = $categoryResolutionMap[$lowerCatName] ?? null;
 
                     // STRICT FK SAFETY CHECK: Ensure category exists in categories table before insert
                     if (!$resolvedCatId || !isset($existingCategoriesById[$resolvedCatId])) {
                         $failedCount++;
-                        $errorDetails[] = "Service #{$psid} ({$name}): Category '{$rawCatName}' has not been imported yet. Please import it first in the Categories tab or choose 'Auto-Create Category'.";
+                        $errorDetails[] = "Service #{$psid} ({$name}): Category '{$rawCatName}' could not be resolved or created in database.";
                         continue;
                     }
 
@@ -516,7 +523,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $sellingRate = $origRateInBase > 0 ? $origRateInBase : 1.0;
                     }
 
-                    // 3. Insert into services table
+                    // 3. Insert into services table with verified category_id
                     $insertStmt->execute([
                         'cid'   => $resolvedCatId,
                         'pid'   => $providerId,
@@ -1197,6 +1204,7 @@ function serviceImporter() {
         providerCategories: [],
         selectedIds: [],
         selectedCategoryNames: [],
+        manualCategoryNames: [],
         searchQuery: '',
         categoryFilter: 'all',
         statusFilter: 'all',
@@ -1213,6 +1221,21 @@ function serviceImporter() {
             this.providerCategories = [];
             this.selectedIds = [];
             this.selectedCategoryNames = [];
+            this.manualCategoryNames = [];
+        },
+
+        syncSelectedCategories() {
+            // Collect categories associated with currently selected services
+            const serviceCatNames = new Set();
+            for (const id of this.selectedIds) {
+                const s = this.services.find(item => item.provider_service_id === id);
+                if (s && s.category_name && s.category_name.trim() !== '') {
+                    serviceCatNames.add(s.category_name.trim());
+                }
+            }
+            // Category is selected if it belongs to any selected service OR was explicitly selected by admin
+            const combined = new Set([...this.manualCategoryNames, ...serviceCatNames]);
+            this.selectedCategoryNames = Array.from(combined);
         },
 
         // Category Selection & Filter Computeds
@@ -1245,11 +1268,19 @@ function serviceImporter() {
         },
 
         toggleSelectCategory(catName) {
-            const idx = this.selectedCategoryNames.indexOf(catName);
-            if (idx > -1) {
-                this.selectedCategoryNames.splice(idx, 1);
+            const isCurrentlySelected = this.selectedCategoryNames.includes(catName);
+            if (isCurrentlySelected) {
+                // Admin manually unchecks this category
+                this.manualCategoryNames = this.manualCategoryNames.filter(n => n !== catName);
+                this.selectedCategoryNames = this.selectedCategoryNames.filter(n => n !== catName);
             } else {
-                this.selectedCategoryNames.push(catName);
+                // Admin manually checks this category
+                if (!this.manualCategoryNames.includes(catName)) {
+                    this.manualCategoryNames.push(catName);
+                }
+                if (!this.selectedCategoryNames.includes(catName)) {
+                    this.selectedCategoryNames.push(catName);
+                }
             }
         },
 
@@ -1263,17 +1294,20 @@ function serviceImporter() {
 
         selectAllFilteredCategories() {
             const namesToAdd = this.filteredCategories.map(c => c.name);
-            this.selectedCategoryNames = Array.from(new Set([...this.selectedCategoryNames, ...namesToAdd]));
+            this.manualCategoryNames = Array.from(new Set([...this.manualCategoryNames, ...namesToAdd]));
+            this.syncSelectedCategories();
         },
 
         selectOnlyNewCategories() {
             const newNames = this.filteredCategories
                 .filter(c => !c.already_imported)
                 .map(c => c.name);
-            this.selectedCategoryNames = newNames;
+            this.manualCategoryNames = Array.from(new Set([...this.manualCategoryNames, ...newNames]));
+            this.syncSelectedCategories();
         },
 
         deselectAllCategories() {
+            this.manualCategoryNames = [];
             this.selectedCategoryNames = [];
         },
 
@@ -1361,7 +1395,8 @@ function serviceImporter() {
                         }
                     });
 
-                    this.selectedCategoryNames = [];
+                    this.manualCategoryNames = this.manualCategoryNames.filter(n => !selectedNamesSet.has(n));
+                    this.syncSelectedCategories();
 
                     const errorHtml = (data.errors && data.errors.length > 0)
                         ? `<div class="mt-2 text-left max-h-32 overflow-y-auto p-2 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-800 space-y-1">
@@ -1468,6 +1503,7 @@ function serviceImporter() {
             } else {
                 this.selectedIds.push(psid);
             }
+            this.syncSelectedCategories();
         },
 
         toggleSelectAll(checked) {
@@ -1481,6 +1517,7 @@ function serviceImporter() {
         selectAllFiltered() {
             const idsToAdd = this.filteredServices.map(s => s.provider_service_id);
             this.selectedIds = Array.from(new Set([...this.selectedIds, ...idsToAdd]));
+            this.syncSelectedCategories();
         },
 
         selectOnlyNew() {
@@ -1488,10 +1525,12 @@ function serviceImporter() {
                 .filter(s => !s.already_imported)
                 .map(s => s.provider_service_id);
             this.selectedIds = newIds;
+            this.syncSelectedCategories();
         },
 
         deselectAll() {
             this.selectedIds = [];
+            this.syncSelectedCategories();
         },
 
         async fetchServices() {
@@ -1505,6 +1544,7 @@ function serviceImporter() {
             this.providerCategories = [];
             this.selectedIds = [];
             this.selectedCategoryNames = [];
+            this.manualCategoryNames = [];
             this.currentPage = 1;
             this.categoryCurrentPage = 1;
 
@@ -1634,6 +1674,7 @@ function serviceImporter() {
                         if (item) item.already_imported = true;
                     });
                     this.selectedIds = [];
+                    this.syncSelectedCategories();
 
                     const imported = Number(data.imported ?? 0);
                     const skipped = Number(data.skipped_duplicates ?? data.skipped ?? 0);
@@ -1643,6 +1684,20 @@ function serviceImporter() {
 
                     if (Array.isArray(data.updated_categories)) {
                         this.categories = data.updated_categories;
+                        // Synchronize providerCategories already_imported and local_category_id
+                        const updatedCatNamesMap = new Map();
+                        this.categories.forEach(c => {
+                            updatedCatNamesMap.set(c.name.toLowerCase(), c.id);
+                        });
+                        this.providerCategories.forEach(pCat => {
+                            const lower = pCat.name.toLowerCase();
+                            if (updatedCatNamesMap.has(lower)) {
+                                pCat.already_imported = true;
+                                const localId = updatedCatNamesMap.get(lower);
+                                pCat.local_category_id = localId;
+                                pCat.matched_category_id = localId;
+                            }
+                        });
                     }
 
                     const errorHtml = (data.errors && data.errors.length > 0)
