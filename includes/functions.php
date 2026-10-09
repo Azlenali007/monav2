@@ -485,6 +485,7 @@ function is_provider_service_imported(int $providerId, string $providerServiceId
 /**
  * Intelligent Category Matcher:
  * Maps external category strings to existing panel category records.
+ * Prioritizes exact normalized matching to avoid assigning services to unrelated categories.
  */
 function find_matching_category_id(string $providerCategoryName, int $defaultCategoryId = 1): int {
     if (empty($providerCategoryName)) {
@@ -495,12 +496,11 @@ function find_matching_category_id(string $providerCategoryName, int $defaultCat
         $stmt = $db->query("SELECT id, name, platform FROM categories WHERE status = 'active' ORDER BY sort_order ASC");
         $categories = $stmt->fetchAll();
 
-        $cleanName = strtolower($providerCategoryName);
+        $cleanName = strtolower(trim($providerCategoryName));
+        // Strict exact match first
         foreach ($categories as $cat) {
-            $catTitle = strtolower($cat['name']);
-            $catPlatform = strtolower($cat['platform']);
-
-            if (str_contains($cleanName, $catPlatform) || str_contains($cleanName, $catTitle)) {
+            $catTitle = strtolower(trim((string)$cat['name']));
+            if ($catTitle === $cleanName) {
                 return (int)$cat['id'];
             }
         }
