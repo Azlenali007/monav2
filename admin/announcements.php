@@ -23,18 +23,27 @@ try {
           `title` VARCHAR(255) NOT NULL,
           `type` ENUM('announcement', 'service', 'maintenance', 'offer', 'telegram', 'update', 'system') NOT NULL DEFAULT 'announcement',
           `badge_text` VARCHAR(64) DEFAULT 'Important Notice',
+          `icon` VARCHAR(50) NULL,
           `message` TEXT NOT NULL,
           `btn_text` VARCHAR(100) NULL,
           `btn_link` VARCHAR(255) NULL,
           `target_audience` ENUM('all', 'active_users') NOT NULL DEFAULT 'all',
+          `target_user_id` INT UNSIGNED NULL,
           `show_once` TINYINT(1) NOT NULL DEFAULT 1,
           `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+          `priority` ENUM('low', 'normal', 'high', 'urgent') NOT NULL DEFAULT 'normal',
           `starts_at` DATETIME NULL,
           `expires_at` DATETIME NULL,
           `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX `idx_announcements_status` (`status`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+        -- Add columns if table already exists without them
+        ALTER TABLE `announcements`
+          ADD COLUMN IF NOT EXISTS `target_user_id` INT UNSIGNED NULL AFTER `target_audience`,
+          ADD COLUMN IF NOT EXISTS `priority` ENUM('low', 'normal', 'high', 'urgent') NOT NULL DEFAULT 'normal' AFTER `status`,
+          ADD COLUMN IF NOT EXISTS `icon` VARCHAR(50) NULL AFTER `badge_text`;
 
         CREATE TABLE IF NOT EXISTS `user_announcement_dismissals` (
           `user_id` INT UNSIGNED NOT NULL,

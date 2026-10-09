@@ -41,6 +41,93 @@ try {
     error_log("Announcement check: " . $e->getMessage());
 }
 
+// Assemble Dynamic 3D Carousel Cards respecting Admin feature settings (Requirement 1)
+$carouselCards = [];
+
+// 1. New Order (Always enabled)
+$carouselCards[] = [
+    'id' => 'new-order',
+    'title' => 'New Order',
+    'subtitle' => 'Place a new order for your social media',
+    'badge' => 'Instant Delivery',
+    'icon' => '⚡',
+    'bgClass' => 'from-blue-600 via-indigo-600 to-purple-600',
+    'glow' => 'rgba(79, 70, 229, 0.55)',
+    'link' => '/user/new-order.php',
+    'action' => 'Open →'
+];
+
+// 2. Mass Order (if enabled in Admin)
+if (get_setting('mass_order_enabled', '1') === '1') {
+    $carouselCards[] = [
+        'id' => 'mass-order',
+        'title' => 'Mass Order',
+        'subtitle' => 'Bulk submit multiple links & quantities',
+        'badge' => 'Batch Engine',
+        'icon' => '📚',
+        'bgClass' => 'from-violet-600 via-purple-600 to-indigo-700',
+        'glow' => 'rgba(124, 58, 237, 0.50)',
+        'link' => '/user/mass-order.php',
+        'action' => 'Open →'
+    ];
+}
+
+// 3. Drip-feed Order (if enabled in Admin)
+if (get_setting('dripfeed_enabled', '1') === '1') {
+    $carouselCards[] = [
+        'id' => 'drip-feed',
+        'title' => 'Drip-feed Order',
+        'subtitle' => 'Scheduled interval delivery across runs',
+        'badge' => 'Gradual Growth',
+        'icon' => '💧',
+        'bgClass' => 'from-cyan-600 via-teal-600 to-emerald-600',
+        'glow' => 'rgba(13, 148, 136, 0.50)',
+        'link' => '/user/drip-feed.php',
+        'action' => 'Open →'
+    ];
+}
+
+// 4. Add Funds (Always enabled)
+$carouselCards[] = [
+    'id' => 'add-funds',
+    'title' => 'Add Funds',
+    'subtitle' => 'Top up your account balance',
+    'badge' => 'Instant Wallet',
+    'icon' => '💳',
+    'bgClass' => 'from-emerald-500 via-green-500 to-teal-600',
+    'glow' => 'rgba(16, 185, 129, 0.45)',
+    'link' => '/user/add-funds.php',
+    'action' => 'Open →'
+];
+
+// 5. My Orders (Always enabled)
+$carouselCards[] = [
+    'id' => 'my-orders',
+    'title' => 'My Orders',
+    'subtitle' => 'Track your live order statuses',
+    'badge' => 'Live Status',
+    'icon' => '📦',
+    'bgClass' => 'from-amber-500 via-orange-500 to-amber-600',
+    'glow' => 'rgba(245, 158, 11, 0.45)',
+    'link' => '/user/orders.php',
+    'action' => 'Open →'
+];
+
+// 6. Refer & Earn (if enabled in Admin)
+if (get_setting('referral_enabled', '1') === '1') {
+    $carouselCards[] = [
+        'id' => 'refer-earn',
+        'title' => 'Refer & Earn',
+        'subtitle' => 'Invite friends & earn lifetime commissions',
+        'badge' => 'Lifetime Payout',
+        'icon' => '🎁',
+        'bgClass' => 'from-rose-500 via-pink-600 to-fuchsia-600',
+        'glow' => 'rgba(236, 72, 153, 0.50)',
+        'link' => '/user/referrals.php',
+        'action' => 'Open →'
+    ];
+}
+
 $pageTitle = "Dashboard - " . app_name();
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -132,21 +219,42 @@ require_once __DIR__ . '/../includes/header.php';
                             </svg>
                         </template>
 
-                        <!-- 3. My Orders Tracking Box Icon -->
+                        <!-- 3. Mass Order Batch Icon -->
+                        <template x-if="item.id === 'mass-order'">
+                            <svg class="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                        </template>
+
+                        <!-- 4. Drip-feed Order Water Droplet Icon -->
+                        <template x-if="item.id === 'drip-feed'">
+                            <svg class="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" />
+                            </svg>
+                        </template>
+
+                        <!-- 5. Refer & Earn Gift/Reward Icon -->
+                        <template x-if="item.id === 'refer-earn'">
+                            <svg class="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V6a2 2 0 10-2 2h2zm0 0H4m8 0h8m-16 5h16M4 13a2 2 0 00-2 2v4a2 2 0 002 2h16a2 2 0 002-2v-4a2 2 0 00-2-2H4z" />
+                            </svg>
+                        </template>
+
+                        <!-- 6. My Orders Tracking Box Icon -->
                         <template x-if="item.id === 'my-orders'">
                             <svg class="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                             </svg>
                         </template>
 
-                        <!-- 4. Services Diamond Icon -->
+                        <!-- 7. Services Diamond Icon -->
                         <template x-if="item.id === 'services'">
                             <svg class="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                             </svg>
                         </template>
 
-                        <!-- 5. Support Chat Icon -->
+                        <!-- 8. Support Chat Icon -->
                         <template x-if="item.id === 'support'">
                             <svg class="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />

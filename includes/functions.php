@@ -697,11 +697,38 @@ function wallet_credit(PDO $db, int $userId, float $amount, string $gateway, ?st
 
 /**
  * =====================================================================
- * PAYMENT GATEWAY REPOSITORY
+ * PAYMENT GATEWAY MANAGEMENT REPOSITORY
+ * Razorpay, PayPal, PhonePe, Paytm, Binance Pay
  * =====================================================================
  */
 
-function get_payment_methods(bool $activeOnly = true): array {
+function is_gateway_configured(array $gateway): bool {
+    $code = strtolower($gateway['code'] ?? '');
+    $config = get_gateway_config($gateway);
+
+    return match ($code) {
+        'razorpay' => !empty($config['key_id']) && !empty($config['key_secret']) && !str_contains($config['key_id'], 'YourKeyHere'),
+        'paypal' => !empty($config['client_id']) && !empty($config['client_secret']),
+        'phonepe' => !empty($config['merchant_id']) && !empty($config['salt_key']),
+        'paytm' => !empty($config['merchant_id']) && !empty($config['merchant_key']),
+        'binance' => !empty($config['api_key']) && !empty($config['secret_key']),
+        default => !empty($gateway['instructions']) || !empty($config)
+    };
+}
+
+function get_gateway_config(array $gateway): array {
+    $raw = $gateway['config_data'] ?? '';
+    if (empty($raw)) {
+        return [];
+    }
+    if (is_array($raw)) {
+        return $raw;
+    }
+    $decoded = json_decode((string)$raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function get_payment_methods(bool $activeOnly = true, bool $configuredOnly = false): array {
     try {
         $db = Database::getConnection();
         $sql = "SELECT * FROM payment_methods";
@@ -711,51 +738,206 @@ function get_payment_methods(bool $activeOnly = true): array {
         $sql .= " ORDER BY sort_order ASC, id ASC";
         $stmt = $db->query($sql);
         $methods = $stmt->fetchAll();
-        if (!empty($methods)) {
-            return $methods;
-        }
     } catch (\Throwable $e) {
-        // Fall back to default
+        $methods = [];
     }
 
-    return [
-        [
-            'id' => 1,
-            'name' => 'Razorpay Instant (UPI / Cards)',
-            'code' => 'razorpay',
-            'type' => 'automatic',
-            'icon' => '⚡',
-            'min_amount' => 100,
-            'max_amount' => 50000,
-            'fee_percent' => 0,
-            'instructions' => 'Instant automated deposit using UPI, NetBanking, Credit or Debit cards.',
-            'status' => 'active'
-        ],
-        [
-            'id' => 2,
-            'name' => 'Paytm / UPI QR & Manual Deposit',
-            'code' => 'paytm_qr',
-            'type' => 'manual',
-            'icon' => '📲',
-            'min_amount' => 50,
-            'max_amount' => 100000,
-            'fee_percent' => 0,
-            'instructions' => 'Pay to UPI ID smmpanel@upi and submit your 12-digit UTR/Reference ID for instant credit verification.',
-            'status' => 'active'
-        ],
-        [
-            'id' => 3,
-            'name' => 'Cryptomus / Crypto USDT (TRC-20)',
-            'code' => 'cryptomus',
-            'type' => 'automatic',
-            'icon' => '🪙',
-            'min_amount' => 500,
-            'max_amount' => 500000,
-            'fee_percent' => 1,
-            'instructions' => 'Automated cryptocurrency payment supporting USDT, BTC, ETH and LTC.',
-            'status' => 'active'
-        ]
-    ];
+    if (empty($methods)) {
+        // Fallback default registry
+        $methods = [
+            [
+                'id' => 1,
+                'name' => 'Razorpay',
+                'code' => 'razorpay',
+                'type' => 'automatic',
+                'icon' => '⚡',
+                'min_amount' => 100,
+                'max_amount' => 50000,
+                'fee_percent' => 0,
+                'instructions' => 'Automated instant checkout supporting UPI, Credit/Debit cards, Net Banking & Wallets.',
+                'config_data' => json_encode(['key_id' => get_setting('razorpay_key_id', ''), 'key_secret' => get_setting('razorpay_key_secret', ''), 'mode' => 'test']),
+                'status' => 'active',
+                'mode' => 'test',
+                'sort_order' => 1
+            ],
+            [
+                'id' => 2,
+                'name' => 'PayPal',
+                'code' => 'paypal',
+                'type' => 'automatic',
+                'icon' => '🅿️',
+                'min_amount' => 500,
+                'max_amount' => 500000,
+                'fee_percent' => 3.5,
+                'instructions' => 'Global payment checkout via PayPal account, Visa, MasterCard, and Amex.',
+                'config_data' => json_encode(['client_id' => '', 'client_secret' => '', 'mode' => 'sandbox']),
+                'status' => 'inactive',
+                'mode' => 'test',
+                'sort_order' => 2
+            ],
+            [
+                'id' => 3,
+                'name' => 'PhonePe',
+                'code' => 'phonepe',
+                'type' => 'automatic',
+                'icon' => '🟣',
+                'min_amount' => 100,
+                'max_amount' => 100000,
+                'fee_percent' => 0,
+                'instructions' => 'Direct PhonePe UPI & QR automated payment with instant server callback.',
+                'config_data' => json_encode(['merchant_id' => '', 'salt_key' => '', 'salt_index' => '1', 'mode' => 'sandbox']),
+                'status' => 'inactive',
+                'mode' => 'test',
+                'sort_order' => 3
+            ],
+            [
+                'id' => 4,
+                'name' => 'Paytm',
+                'code' => 'paytm',
+                'type' => 'automatic',
+                'icon' => '📲',
+                'min_amount' => 50,
+                'max_amount' => 100000,
+                'fee_percent' => 0,
+                'instructions' => 'Paytm Gateway / UPI QR & Net Banking with automated verification.',
+                'config_data' => json_encode(['merchant_id' => '', 'merchant_key' => '', 'channel_id' => 'WEB', 'industry_type' => 'Retail', 'upi_id' => 'smmpanel@upi', 'mode' => 'staging']),
+                'status' => 'inactive',
+                'mode' => 'test',
+                'sort_order' => 4
+            ],
+            [
+                'id' => 5,
+                'name' => 'Binance Pay',
+                'code' => 'binance',
+                'type' => 'automatic',
+                'icon' => '🟡',
+                'min_amount' => 500,
+                'max_amount' => 1000000,
+                'fee_percent' => 1,
+                'instructions' => 'Cryptocurrency checkout powered by Binance Pay (USDT, BTC, ETH, BUSD).',
+                'config_data' => json_encode(['api_key' => '', 'secret_key' => '', 'merchant_id' => '', 'mode' => 'test']),
+                'status' => 'inactive',
+                'mode' => 'test',
+                'sort_order' => 5
+            ]
+        ];
+    }
+
+    if ($configuredOnly) {
+        $methods = array_filter($methods, fn($m) => is_gateway_configured($m));
+    }
+
+    return array_values($methods);
+}
+
+function get_payment_method(string $code): ?array {
+    $methods = get_payment_methods(false);
+    foreach ($methods as $m) {
+        if (strtolower($m['code']) === strtolower($code)) {
+            return $m;
+        }
+    }
+    return null;
+}
+
+function update_gateway_config(string $code, array $config, array $extra = []): bool {
+    try {
+        $db = Database::getConnection();
+        $fields = ["config_data = :config"];
+        $params = [
+            'code' => $code,
+            'config' => json_encode($config)
+        ];
+
+        if (isset($extra['name'])) {
+            $fields[] = "name = :name";
+            $params['name'] = trim((string)$extra['name']);
+        }
+        if (isset($extra['min_amount'])) {
+            $fields[] = "min_amount = :min_amount";
+            $params['min_amount'] = (float)$extra['min_amount'];
+        }
+        if (isset($extra['max_amount'])) {
+            $fields[] = "max_amount = :max_amount";
+            $params['max_amount'] = (float)$extra['max_amount'];
+        }
+        if (isset($extra['fee_percent'])) {
+            $fields[] = "fee_percent = :fee_percent";
+            $params['fee_percent'] = (float)$extra['fee_percent'];
+        }
+        if (isset($extra['instructions'])) {
+            $fields[] = "instructions = :instructions";
+            $params['instructions'] = trim((string)$extra['instructions']);
+        }
+        if (isset($extra['mode'])) {
+            $fields[] = "mode = :mode";
+            $params['mode'] = in_array($extra['mode'], ['test', 'live'], true) ? $extra['mode'] : 'test';
+        }
+
+        $sql = "UPDATE payment_methods SET " . implode(', ', $fields) . " WHERE code = :code";
+        $stmt = $db->prepare($sql);
+        $ok = $stmt->execute($params);
+
+        // Sync razorpay keys with settings table for backward compatibility
+        if ($code === 'razorpay' && isset($config['key_id'], $config['key_secret'])) {
+            set_setting('razorpay_key_id', $config['key_id']);
+            set_setting('razorpay_key_secret', $config['key_secret']);
+        }
+
+        return $ok;
+    } catch (\Throwable $e) {
+        error_log("update_gateway_config error: " . $e->getMessage());
+        return false;
+    }
+}
+
+function toggle_gateway_status(string $code, bool $enable): array {
+    $method = get_payment_method($code);
+    if (!$method) {
+        return ['success' => false, 'error' => "Gateway '{$code}' not found."];
+    }
+
+    if ($enable && !is_gateway_configured($method)) {
+        return [
+            'success' => false,
+            'error' => "Cannot enable {$method['name']}: Configuration is incomplete. Please enter required API credentials first."
+        ];
+    }
+
+    try {
+        $db = Database::getConnection();
+        $newStatus = $enable ? 'active' : 'inactive';
+        $stmt = $db->prepare("UPDATE payment_methods SET status = :status WHERE code = :code");
+        $stmt->execute(['status' => $newStatus, 'code' => $code]);
+        return ['success' => true, 'status' => $newStatus];
+    } catch (\Throwable $e) {
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+/**
+ * =====================================================================
+ * NOTIFICATION CENTER & UNREAD HELPERS
+ * =====================================================================
+ */
+function get_unread_notifications_count(int $userId): int {
+    try {
+        $db = Database::getConnection();
+        $stmt = $db->prepare("
+            SELECT COUNT(*) 
+            FROM announcements a
+            LEFT JOIN user_notification_reads r ON a.id = r.announcement_id AND r.user_id = :uid
+            WHERE a.status = 'active'
+              AND (a.target_audience = 'all' OR a.target_user_id = :uid)
+              AND (a.starts_at IS NULL OR a.starts_at <= NOW())
+              AND (a.expires_at IS NULL OR a.expires_at >= NOW())
+              AND r.read_at IS NULL
+        ");
+        $stmt->execute(['uid' => $userId]);
+        return (int)$stmt->fetchColumn();
+    } catch (\Throwable $e) {
+        return 0;
+    }
 }
 
 

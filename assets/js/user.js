@@ -4,9 +4,80 @@
  * Card Full-Screen Expansion Transition, and Clipboard Helpers
  */
 
-function cardCarousel() {
+function cardCarousel(initialItems) {
+    const defaultItems = [
+        {
+            id: 'new-order',
+            title: 'New Order',
+            subtitle: 'Place a new order for your social media',
+            badge: 'Instant Delivery',
+            icon: '⚡',
+            bgClass: 'from-blue-600 via-indigo-600 to-purple-600',
+            glow: 'rgba(79, 70, 229, 0.55)',
+            link: '/user/new-order.php',
+            action: 'Open →'
+        },
+        {
+            id: 'mass-order',
+            title: 'Mass Order',
+            subtitle: 'Bulk submit multiple links & quantities',
+            badge: 'Batch Engine',
+            icon: '📚',
+            bgClass: 'from-violet-600 via-purple-600 to-indigo-700',
+            glow: 'rgba(124, 58, 237, 0.50)',
+            link: '/user/mass-order.php',
+            action: 'Open →'
+        },
+        {
+            id: 'drip-feed',
+            title: 'Drip-feed Order',
+            subtitle: 'Scheduled interval delivery across runs',
+            badge: 'Gradual Growth',
+            icon: '💧',
+            bgClass: 'from-cyan-600 via-teal-600 to-emerald-600',
+            glow: 'rgba(13, 148, 136, 0.50)',
+            link: '/user/drip-feed.php',
+            action: 'Open →'
+        },
+        {
+            id: 'add-funds',
+            title: 'Add Funds',
+            subtitle: 'Top up your account wallet balance',
+            badge: 'Instant Wallet',
+            icon: '💳',
+            bgClass: 'from-emerald-500 via-green-500 to-teal-600',
+            glow: 'rgba(16, 185, 129, 0.45)',
+            link: '/user/add-funds.php',
+            action: 'Open →'
+        },
+        {
+            id: 'my-orders',
+            title: 'My Orders',
+            subtitle: 'Track your live order statuses',
+            badge: 'Live Status',
+            icon: '📦',
+            bgClass: 'from-amber-500 via-orange-500 to-amber-600',
+            glow: 'rgba(245, 158, 11, 0.45)',
+            link: '/user/orders.php',
+            action: 'Open →'
+        },
+        {
+            id: 'refer-earn',
+            title: 'Refer & Earn',
+            subtitle: 'Invite friends & earn lifetime commissions',
+            badge: 'Lifetime Payout',
+            icon: '🎁',
+            bgClass: 'from-rose-500 via-pink-600 to-fuchsia-600',
+            glow: 'rgba(236, 72, 153, 0.50)',
+            link: '/user/referrals.php',
+            action: 'Open →'
+        }
+    ];
+
+    const cardList = (Array.isArray(initialItems) && initialItems.length) ? initialItems : defaultItems;
+
     return {
-        active: 1, // 'New Order' (index 1) is the prominent center card by default
+        active: 0, // 'New Order' (index 0) is the prominent center card by default
         startX: 0,
         startY: 0,
         startTime: 0,
@@ -14,63 +85,7 @@ function cardCarousel() {
         dragMoved: false,
         isMobile: false,
         isExpanding: false,
-        items: [
-            {
-                id: 'add-funds',
-                title: 'Add Funds',
-                subtitle: 'Top up your wallet',
-                badge: 'Instant Wallet',
-                icon: '💳',
-                bgClass: 'from-emerald-500 via-green-500 to-teal-600',
-                glow: 'rgba(16, 185, 129, 0.45)',
-                link: '/user/add-funds.php',
-                action: 'Open →'
-            },
-            {
-                id: 'new-order',
-                title: 'New Order',
-                subtitle: 'Place a new order for your social media',
-                badge: 'Instant Delivery',
-                icon: '⚡',
-                bgClass: 'from-blue-600 via-indigo-600 to-purple-600',
-                glow: 'rgba(79, 70, 229, 0.55)',
-                link: '/user/new-order.php',
-                action: 'Open →'
-            },
-            {
-                id: 'my-orders',
-                title: 'My Orders',
-                subtitle: 'Track your orders',
-                badge: 'Live Status',
-                icon: '📦',
-                bgClass: 'from-amber-500 via-orange-500 to-amber-600',
-                glow: 'rgba(245, 158, 11, 0.45)',
-                link: '/user/orders.php',
-                action: 'Open →'
-            },
-            {
-                id: 'services',
-                title: 'Services',
-                subtitle: 'Browse all services',
-                badge: 'Wholesale Rates',
-                icon: '💎',
-                bgClass: 'from-pink-500 via-rose-500 to-rose-600',
-                glow: 'rgba(236, 72, 153, 0.45)',
-                link: '/user/services.php',
-                action: 'Open →'
-            },
-            {
-                id: 'support',
-                title: 'Support',
-                subtitle: 'Get help',
-                badge: '24/7 Desk',
-                icon: '💬',
-                bgClass: 'from-purple-500 via-violet-600 to-indigo-600',
-                glow: 'rgba(139, 92, 246, 0.45)',
-                link: '/user/tickets.php',
-                action: 'Open →'
-            }
-        ],
+        items: cardList,
 
         init() {
             this.checkMobile();

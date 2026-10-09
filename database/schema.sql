@@ -5,6 +5,9 @@
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+DROP TABLE IF EXISTS `update_audit_logs`;
+DROP TABLE IF EXISTS `migrations`;
+DROP TABLE IF EXISTS `user_notification_reads`;
 DROP TABLE IF EXISTS `user_announcement_dismissals`;
 DROP TABLE IF EXISTS `announcements`;
 DROP TABLE IF EXISTS `referral_commissions`;
@@ -173,17 +176,21 @@ CREATE TABLE `announcements` (
   `title` VARCHAR(255) NOT NULL,
   `type` ENUM('announcement', 'service', 'maintenance', 'offer', 'telegram', 'update', 'system') NOT NULL DEFAULT 'announcement',
   `badge_text` VARCHAR(64) DEFAULT 'Important Notice',
+  `icon` VARCHAR(50) NULL,
   `message` TEXT NOT NULL,
   `btn_text` VARCHAR(100) NULL,
   `btn_link` VARCHAR(255) NULL,
   `target_audience` ENUM('all', 'active_users') NOT NULL DEFAULT 'all',
+  `target_user_id` INT UNSIGNED NULL,
   `show_once` TINYINT(1) NOT NULL DEFAULT 1,
   `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `priority` ENUM('low', 'normal', 'high', 'urgent') NOT NULL DEFAULT 'normal',
   `starts_at` DATETIME NULL,
   `expires_at` DATETIME NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX `idx_announcements_status` (`status`)
+  INDEX `idx_announcements_status` (`status`),
+  INDEX `idx_announcements_target_user` (`target_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 11. USER ANNOUNCEMENT DISMISSALS TABLE
@@ -194,6 +201,44 @@ CREATE TABLE `user_announcement_dismissals` (
   PRIMARY KEY (`user_id`, `announcement_id`),
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`announcement_id`) REFERENCES `announcements`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11b. USER NOTIFICATION READS TABLE (Notification Center)
+CREATE TABLE `user_notification_reads` (
+  `user_id` INT UNSIGNED NOT NULL,
+  `announcement_id` INT UNSIGNED NOT NULL,
+  `read_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`, `announcement_id`),
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`announcement_id`) REFERENCES `announcements`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11c. DATABASE MIGRATIONS TRACKING TABLE
+CREATE TABLE `migrations` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `migration` VARCHAR(255) NOT NULL UNIQUE,
+  `batch` INT UNSIGNED NOT NULL DEFAULT 1,
+  `applied_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11d. APPLICATION UPDATE AUDIT LOGS TABLE
+CREATE TABLE `update_audit_logs` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` INT UNSIGNED NULL,
+  `version_from` VARCHAR(50) NOT NULL,
+  `version_to` VARCHAR(50) NOT NULL,
+  `started_at` DATETIME NOT NULL,
+  `completed_at` DATETIME NULL,
+  `backup_status` ENUM('pending', 'success', 'failed', 'skipped') NOT NULL DEFAULT 'pending',
+  `backup_file` VARCHAR(255) NULL,
+  `validation_status` ENUM('pending', 'success', 'failed') NOT NULL DEFAULT 'pending',
+  `migration_status` ENUM('pending', 'success', 'failed', 'skipped') NOT NULL DEFAULT 'pending',
+  `install_status` ENUM('pending', 'success', 'failed') NOT NULL DEFAULT 'pending',
+  `health_check_status` ENUM('pending', 'success', 'failed') NOT NULL DEFAULT 'pending',
+  `rollback_status` ENUM('none', 'pending', 'success', 'failed') NOT NULL DEFAULT 'none',
+  `status` ENUM('in_progress', 'success', 'failed', 'rolled_back') NOT NULL DEFAULT 'in_progress',
+  `details` TEXT NULL,
+  `error_message` TEXT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 12. REFERRALS TABLE
@@ -260,6 +305,7 @@ CREATE TABLE `payment_methods` (
   `instructions` TEXT NULL,
   `config_data` TEXT NULL,
   `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `mode` ENUM('test', 'live') NOT NULL DEFAULT 'test',
   `sort_order` INT NOT NULL DEFAULT 0,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -273,6 +319,9 @@ INSERT INTO `settings` (`key`, `value`) VALUES
 ('site_tagline', 'Grow Your Social Media'),
 ('currency', '₹'),
 ('currency_code', 'INR'),
+('app_version', '1.0.0'),
+('mass_order_enabled', '1'),
+('dripfeed_enabled', '1'),
 ('razorpay_key_id', 'rzp_test_YourKeyHere'),
 ('razorpay_key_secret', 'YourSecretKeyHere'),
 ('min_deposit', '100'),
@@ -294,12 +343,13 @@ INSERT INTO `currencies` (`code`, `symbol`, `name`, `exchange_rate`, `is_base`, 
 ('GBP', '£', 'British Pound', 0.009200, 0, 'active'),
 ('BRL', 'R$', 'Brazilian Real', 0.065000, 0, 'active');
 
--- Default Seed Payment Gateways
-INSERT INTO `payment_methods` (`name`, `code`, `type`, `icon`, `min_amount`, `max_amount`, `fee_percent`, `instructions`, `config_data`, `status`, `sort_order`) VALUES
-('Razorpay Instant (UPI / Cards)', 'razorpay', 'automatic', '⚡', 100.0000, 50000.0000, 0.00, 'Automated instant checkout supporting UPI, Credit/Debit cards, and Net Banking.', '{"key_id":"rzp_test_YourKeyHere"}', 'active', 1),
-('Paytm / UPI QR & Manual Deposit', 'paytm_qr', 'manual', '📲', 50.0000, 100000.0000, 0.00, 'Scan the official UPI QR code or pay to UPI ID smmpanel@upi, then submit your 12-digit UTR/Transaction Reference ID below for instant approval.', '{"upi_id":"smmpanel@upi"}', 'active', 2),
-('Cryptomus / Crypto USDT (TRC-20)', 'cryptomus', 'automatic', '🪙', 500.0000, 500000.0000, 1.00, 'Instant crypto deposit with USDT, BTC, ETH, and LTC on TRC20, BEP20 or Polygon.', '{}', 'active', 3),
-('Bank Wire / Manual Transfer', 'manual_bank', 'manual', '🏦', 500.0000, 1000000.0000, 0.00, 'Direct NEFT / IMPS / RTGS wire transfer. Please attach your payment slip or bank reference number.', '{"account_name":"SMM Panel Digital","account_number":"123456789012","ifsc":"HDFC0001234","bank_name":"HDFC Bank"}', 'active', 4);
+-- Default Seed Payment Gateways (Razorpay, PayPal, PhonePe, Paytm, Binance Pay)
+INSERT INTO `payment_methods` (`name`, `code`, `type`, `icon`, `min_amount`, `max_amount`, `fee_percent`, `instructions`, `config_data`, `status`, `mode`, `sort_order`) VALUES
+('Razorpay', 'razorpay', 'automatic', '⚡', 100.0000, 50000.0000, 0.00, 'Automated instant checkout supporting UPI, Credit/Debit cards, Net Banking & Wallets.', '{"key_id":"rzp_test_YourKeyHere","key_secret":"","webhook_secret":"","mode":"test"}', 'active', 'test', 1),
+('PayPal', 'paypal', 'automatic', '🅿️', 500.0000, 500000.0000, 3.50, 'Global payment checkout via PayPal account, Visa, MasterCard, and Amex.', '{"client_id":"","client_secret":"","webhook_id":"","mode":"sandbox"}', 'inactive', 'test', 2),
+('PhonePe', 'phonepe', 'automatic', '🟣', 100.0000, 100000.0000, 0.00, 'Direct PhonePe UPI & QR automated payment with instant server callback.', '{"merchant_id":"","salt_key":"","salt_index":"1","mode":"sandbox"}', 'inactive', 'test', 3),
+('Paytm', 'paytm', 'automatic', '📲', 50.0000, 100000.0000, 0.00, 'Paytm Gateway / UPI QR & Net Banking with automated verification.', '{"merchant_id":"","merchant_key":"","channel_id":"WEB","industry_type":"Retail","upi_id":"smmpanel@upi","mode":"staging"}', 'inactive', 'test', 4),
+('Binance Pay', 'binance', 'automatic', '🟡', 500.0000, 1000000.0000, 1.00, 'Cryptocurrency checkout powered by Binance Pay (USDT, BTC, ETH, BUSD).', '{"api_key":"","secret_key":"","merchant_id":"","mode":"test"}', 'inactive', 'test', 5);
 
 -- Initial Admin Account: username: admin / password: password123
 -- Initial User Account: username: aaris / password: password123

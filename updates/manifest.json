@@ -1,0 +1,41 @@
+{
+  "latest_version": "1.1.0",
+  "title": "Payment Gateway Management & Feature Expansion Update",
+  "release_date": "2026-10-09",
+  "size": "2.4 MB",
+  "release_notes": [
+    "Added centralized Admin Payment Gateway Management (Razorpay, PayPal, PhonePe, Paytm, Binance Pay)",
+    "Added granular Gateway Enable/Disable controls with server-side validation",
+    "Added User Notification Center with unread counts and read tracking",
+    "Added Admin Announcement/Notification creation with audience targeting and priorities",
+    "Added User Dashboard Action Cards (Mass Order, Drip-feed Order, Refer & Earn)",
+    "Included safe versioned database migration (002_payment_gateways_and_notifications.sql)",
+    "Added automated backup, validation, lock management and health check rollback architecture"
+  ],
+  "changed_files": {
+    "modified": [
+      "user/dashboard.php",
+      "user/add-funds.php",
+      "admin/payments.php",
+      "admin/announcements.php",
+      "includes/header.php",
+      "includes/functions.php",
+      "assets/js/user.js"
+    ],
+    "added": [
+      "admin/updates.php",
+      "user/mass-order.php",
+      "user/drip-feed.php",
+      "user/notifications.php",
+      "user/api/notifications.php",
+      "includes/updates.php",
+      "database/migrations/001_initial_schema.sql",
+      "database/migrations/002_payment_gateways_and_notifications.sql"
+    ],
+    "database": [
+      "database/migrations/002_payment_gateways_and_notifications.sql"
+    ]
+  },
+  "required_php": "8.1.0",
+  "checksum": "sha256-9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b"
+}
