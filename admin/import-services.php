@@ -115,6 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'import_services') {
         header('Content-Type: application/json; charset=UTF-8');
         $providerId = (int)($_POST['provider_id'] ?? 0);
+        $importMode = trim($_POST['import_mode'] ?? 'both'); // 'both', 'categories_only', 'services_only'
         $markupPercent = (float)($_POST['markup_percent'] ?? 0.0);
         $markupFixed = (float)($_POST['markup_fixed'] ?? 0.0);
         $defaultCategoryId = (int)($_POST['default_category_id'] ?? 1);
@@ -149,80 +150,156 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $defaultCategoryId = $firstCat > 0 ? $firstCat : 1;
         }
 
-        $imported = 0;
-        $skipped = 0;
-        $failed = 0;
+        $categoriesCreated = 0;
+        $categoriesMatched = 0;
+        $servicesImported = 0;
+        $servicesUpdated = 0;
+        $duplicatesSkipped = 0;
+        $errorsCount = 0;
 
         $db->beginTransaction();
         try {
-            $dupCheckStmt = $db->prepare("SELECT id FROM services WHERE provider_id = :pid AND provider_service_id = :psid LIMIT 1");
-            $insertStmt = $db->prepare("
-                INSERT INTO services (
-                    category_id, provider_id, provider_service_id, name, 
-                    rate_per_1000, original_rate, min_quantity, max_quantity, 
-                    service_type, speed, description, status
-                ) VALUES (
-                    :cid, :pid, :psid, :name, 
-                    :rate, :orig, :min, :max, 
-                    :stype, :speed, :desc, 'active'
-                )
-            ");
+            // Load existing categories indexed by lowercase name
+            $allCatsStmt = $db->query("SELECT id, name, platform FROM categories");
+            $existingCategoriesMap = [];
+            while ($c = $allCatsStmt->fetch()) {
+                $existingCategoriesMap[strtolower(trim($c['name']))] = (int)$c['id'];
+            }
 
-            foreach ($servicesToImport as $svc) {
-                $psid = trim((string)($svc['provider_service_id'] ?? ''));
-                $name = trim((string)($svc['name'] ?? ''));
-                $originalRate = (float)($svc['original_rate'] ?? 0.0);
-                $minQty = max(1, (int)($svc['min_quantity'] ?? 10));
-                $maxQty = max($minQty, (int)($svc['max_quantity'] ?? 100000));
-                $catId = !empty($svc['category_id']) ? (int)$svc['category_id'] : $defaultCategoryId;
-                $serviceType = in_array($svc['service_type'] ?? '', ['custom_comments', 'package', 'poll']) ? $svc['service_type'] : 'default';
-                $speed = trim((string)($svc['speed'] ?? 'Fast Delivery'));
-                $desc = !empty($svc['description']) ? trim((string)$svc['description']) : null;
+            // Category Resolution Map for this import
+            $categoryResolutionMap = [];
 
-                if ($psid === '' || $name === '') {
-                    $failed++;
-                    continue;
+            // Step A: Handle Category Import if mode is 'both' or 'categories_only'
+            if ($importMode === 'both' || $importMode === 'categories_only') {
+                $catInsertStmt = $db->prepare("
+                    INSERT INTO categories (name, platform, sort_order, status)
+                    VALUES (:name, :platform, :sort, 'active')
+                ");
+
+                foreach ($servicesToImport as $svc) {
+                    $rawCatName = trim((string)($svc['category_name'] ?? 'Other'));
+                    if ($rawCatName === '') $rawCatName = 'Other';
+                    $lowerCatName = strtolower($rawCatName);
+
+                    if (isset($categoryResolutionMap[$lowerCatName])) {
+                        continue;
+                    }
+
+                    if (isset($existingCategoriesMap[$lowerCatName])) {
+                        // Category already exists
+                        $categoryResolutionMap[$lowerCatName] = $existingCategoriesMap[$lowerCatName];
+                        $categoriesMatched++;
+                    } else {
+                        // Create missing category
+                        $pName = strtolower($rawCatName);
+                        $platform = 'other';
+                        if (str_contains($pName, 'instagram')) $platform = 'instagram';
+                        elseif (str_contains($pName, 'youtube')) $platform = 'youtube';
+                        elseif (str_contains($pName, 'telegram')) $platform = 'telegram';
+                        elseif (str_contains($pName, 'facebook')) $platform = 'facebook';
+                        elseif (str_contains($pName, 'tiktok')) $platform = 'tiktok';
+                        elseif (str_contains($pName, 'twitter') || str_contains($pName, ' x ')) $platform = 'twitter';
+
+                        $catInsertStmt->execute([
+                            'name' => $rawCatName,
+                            'platform' => $platform,
+                            'sort' => count($existingCategoriesMap) + 1
+                        ]);
+                        $newCatId = (int)$db->lastInsertId();
+                        $existingCategoriesMap[$lowerCatName] = $newCatId;
+                        $categoryResolutionMap[$lowerCatName] = $newCatId;
+                        $categoriesCreated++;
+                    }
                 }
+            }
 
-                // 1. Duplicate check: provider_id + provider_service_id
-                $dupCheckStmt->execute(['pid' => $providerId, 'psid' => $psid]);
-                if ($dupCheckStmt->fetch()) {
-                    $skipped++;
-                    continue;
+            // Step B: Handle Service Import if mode is 'both' or 'services_only'
+            if ($importMode === 'both' || $importMode === 'services_only') {
+                $dupCheckStmt = $db->prepare("SELECT id, name FROM services WHERE provider_id = :pid AND provider_service_id = :psid LIMIT 1");
+                $insertStmt = $db->prepare("
+                    INSERT INTO services (
+                        category_id, provider_id, provider_service_id, name, 
+                        rate_per_1000, original_rate, min_quantity, max_quantity, 
+                        service_type, speed, description, status
+                    ) VALUES (
+                        :cid, :pid, :psid, :name, 
+                        :rate, :orig, :min, :max, 
+                        :stype, :speed, :desc, 'active'
+                    )
+                ");
+
+                foreach ($servicesToImport as $svc) {
+                    $psid = trim((string)($svc['provider_service_id'] ?? ''));
+                    $name = trim((string)($svc['name'] ?? ''));
+                    $originalRate = (float)($svc['original_rate'] ?? 0.0);
+                    $minQty = max(1, (int)($svc['min_quantity'] ?? 10));
+                    $maxQty = max($minQty, (int)($svc['max_quantity'] ?? 100000));
+                    $serviceType = in_array($svc['service_type'] ?? '', ['custom_comments', 'package', 'poll']) ? $svc['service_type'] : 'default';
+                    $speed = trim((string)($svc['speed'] ?? 'Fast Delivery'));
+                    $desc = !empty($svc['description']) ? trim((string)$svc['description']) : null;
+
+                    if ($psid === '' || $name === '') {
+                        $errorsCount++;
+                        continue;
+                    }
+
+                    // Resolve category ID
+                    $rawCatName = trim((string)($svc['category_name'] ?? ''));
+                    $lowerCatName = strtolower($rawCatName);
+                    $catId = $defaultCategoryId;
+
+                    if (isset($categoryResolutionMap[$lowerCatName])) {
+                        $catId = $categoryResolutionMap[$lowerCatName];
+                    } elseif (isset($existingCategoriesMap[$lowerCatName])) {
+                        $catId = $existingCategoriesMap[$lowerCatName];
+                    } elseif (!empty($svc['category_id'])) {
+                        $catId = (int)$svc['category_id'];
+                    }
+
+                    // 1. Duplicate check: provider_id + provider_service_id
+                    $dupCheckStmt->execute(['pid' => $providerId, 'psid' => $psid]);
+                    if ($dupCheckStmt->fetch()) {
+                        $duplicatesSkipped++;
+                        continue;
+                    }
+
+                    // 2. Price markup calculation
+                    $sellingRate = calculate_service_markup($originalRate, $markupPercent, $markupFixed);
+                    if ($sellingRate <= 0.0001) {
+                        $sellingRate = $originalRate > 0 ? $originalRate : 1.0;
+                    }
+
+                    // 3. Insert into database
+                    $insertStmt->execute([
+                        'cid'   => $catId,
+                        'pid'   => $providerId,
+                        'psid'  => $psid,
+                        'name'  => $name,
+                        'rate'  => $sellingRate,
+                        'orig'  => $originalRate,
+                        'min'   => $minQty,
+                        'max'   => $maxQty,
+                        'stype' => $serviceType,
+                        'speed' => $speed,
+                        'desc'  => $desc
+                    ]);
+
+                    $servicesImported++;
                 }
-
-                // 2. Price markup calculation
-                $sellingRate = calculate_service_markup($originalRate, $markupPercent, $markupFixed);
-                if ($sellingRate <= 0.0001) {
-                    $sellingRate = $originalRate > 0 ? $originalRate : 1.0;
-                }
-
-                // 3. Insert into database
-                $insertStmt->execute([
-                    'cid'   => $catId,
-                    'pid'   => $providerId,
-                    'psid'  => $psid,
-                    'name'  => $name,
-                    'rate'  => $sellingRate,
-                    'orig'  => $originalRate,
-                    'min'   => $minQty,
-                    'max'   => $maxQty,
-                    'stype' => $serviceType,
-                    'speed' => $speed,
-                    'desc'  => $desc
-                ]);
-
-                $imported++;
             }
 
             $db->commit();
 
             echo json_encode([
                 'success' => true,
-                'imported' => $imported,
-                'skipped' => $skipped,
-                'failed' => $failed,
-                'message' => "Successfully imported {$imported} service(s). ({$skipped} skipped as already present, {$failed} invalid)."
+                'import_mode' => $importMode,
+                'categories_created' => $categoriesCreated,
+                'categories_matched' => $categoriesMatched,
+                'services_imported' => $servicesImported,
+                'services_updated' => $servicesUpdated,
+                'duplicates_skipped' => $duplicatesSkipped,
+                'errors' => $errorsCount,
+                'message' => "Import complete: {$categoriesCreated} categories created, {$servicesImported} services imported, {$duplicatesSkipped} duplicates skipped."
             ]);
             exit;
 
@@ -354,6 +431,37 @@ require_once __DIR__ . '/../includes/header.php';
                             <option value="<?= (int)$cat['id'] ?>"><?= e($cat['name']) ?> (<?= ucfirst($cat['platform']) ?>)</option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+            </div>
+
+            <!-- Import Operation Mode (Requirement 7) -->
+            <div class="pt-4 border-t border-slate-100 space-y-2">
+                <label class="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">Select Import Operation</label>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <label class="p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3"
+                           :class="importMode === 'both' ? 'bg-blue-50/70 border-blue-500 ring-2 ring-blue-500/10 shadow-xs' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'">
+                        <input type="radio" name="op_mode" value="both" x-model="importMode" class="mt-0.5 text-blue-600 focus:ring-blue-500">
+                        <div>
+                            <strong class="text-xs font-bold text-slate-900 block">🌟 Import Categories &amp; Services</strong>
+                            <span class="text-[11px] text-slate-500 block leading-tight mt-0.5">Creates missing categories and maps services with profit markup. (Recommended)</span>
+                        </div>
+                    </label>
+                    <label class="p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3"
+                           :class="importMode === 'categories_only' ? 'bg-purple-50/70 border-purple-500 ring-2 ring-purple-500/10 shadow-xs' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'">
+                        <input type="radio" name="op_mode" value="categories_only" x-model="importMode" class="mt-0.5 text-purple-600 focus:ring-purple-500">
+                        <div>
+                            <strong class="text-xs font-bold text-slate-900 block">📁 Import Categories Only</strong>
+                            <span class="text-[11px] text-slate-500 block leading-tight mt-0.5">Extracts and creates missing categories from provider without altering services.</span>
+                        </div>
+                    </label>
+                    <label class="p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3"
+                           :class="importMode === 'services_only' ? 'bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/10 shadow-xs' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'">
+                        <input type="radio" name="op_mode" value="services_only" x-model="importMode" class="mt-0.5 text-emerald-600 focus:ring-emerald-500">
+                        <div>
+                            <strong class="text-xs font-bold text-slate-900 block">⚡ Import Services Only</strong>
+                            <span class="text-[11px] text-slate-500 block leading-tight mt-0.5">Imports services mapped strictly to existing local category structure.</span>
+                        </div>
+                    </label>
                 </div>
             </div>
 

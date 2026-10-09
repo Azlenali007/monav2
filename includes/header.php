@@ -23,6 +23,7 @@ $adminNavLinks = [
     ['name' => 'Dashboard', 'url' => '/admin/dashboard.php', 'icon' => '📊'],
     ['name' => 'Users', 'url' => '/admin/users.php', 'icon' => '👥'],
     ['name' => 'Orders', 'url' => '/admin/orders.php', 'icon' => '📦'],
+    ['name' => 'Categories', 'url' => '/admin/categories.php', 'icon' => '📁'],
     ['name' => 'Services', 'url' => '/admin/services.php', 'icon' => '⚡'],
     ['name' => 'Providers', 'url' => '/admin/providers.php', 'icon' => '🔌'],
     ['name' => 'Payments', 'url' => '/admin/payments.php', 'icon' => '💳'],
@@ -32,7 +33,6 @@ $adminNavLinks = [
     ['name' => 'Tickets', 'url' => '/admin/tickets.php', 'icon' => '💬'],
     ['name' => 'Announcements', 'url' => '/admin/announcements.php', 'icon' => '📢'],
     ['name' => 'Settings', 'url' => '/admin/settings.php', 'icon' => '⚙️'],
-    ['name' => 'Update Center', 'url' => '/admin/updates.php', 'icon' => '🚀'],
 ];
 ?>
 <!DOCTYPE html>

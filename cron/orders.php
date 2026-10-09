@@ -82,3 +82,9 @@ foreach ($orders as $order) {
 }
 
 echo "[" . date('Y-m-d H:i:s') . "] Order sync completed.\n";
+
+// Execute scheduled drip-feed runs
+if (file_exists(__DIR__ . '/dripfeed.php')) {
+    include __DIR__ . '/dripfeed.php';
+}
+
